@@ -75,7 +75,7 @@
         {% elif source.last_sync_status.value == 'ERROR' %}<span class="badge badge-critical">Error</span>
         {% else %}<span class="badge badge-neutral">Never synced</span>{% endif %}
       </td>
-      <td>{{ source.last_sync_at.strftime('%Y-%m-%d %H:%M UTC') if source.last_sync_at else '&mdash;' }}</td>
+      <td>{{ source.last_sync_at.strftime('%Y-%m-%d %H:%M UTC') if source.last_sync_at else '—' }}</td>
       <td>{% if source.is_active %}<span class="badge badge-good">Active</span>{% else %}<span class="badge badge-neutral">Inactive</span>{% endif %}</td>
     </tr>
     <tr class="detail-row" style="display:none"><td colspan="6"></td></tr>

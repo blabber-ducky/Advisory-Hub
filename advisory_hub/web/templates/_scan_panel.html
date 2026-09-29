@@ -49,9 +49,9 @@
         <tbody>
           {% for match in tier_matches %}
           <tr title="{{ match.rationale }}">
-            <td>{{ match.vendor or '&mdash;' }}:{{ match.product }}</td>
+            <td>{{ match.vendor or '—' }}:{{ match.product }}</td>
             <td style="font-family:ui-monospace,monospace;font-size:.78rem">{{ match.matched_version }}</td>
-            <td>{{ match.cve_id or '&mdash;' }}</td>
+            <td>{{ match.cve_id or '—' }}</td>
             <td>{{ match.device_count }}</td>
             <td style="font-size:.78rem;color:var(--muted)">{{ match.snapshot.source.name }}</td>
           </tr>

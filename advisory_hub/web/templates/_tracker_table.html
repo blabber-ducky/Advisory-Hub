@@ -21,7 +21,7 @@
         <td>{{ advisory.source.short_code }}</td>
         <td>{{ m.type_badge(advisory.type.value) }}</td>
         <td class="col-title">
-          <a class="ref" href="/advisories/{{ advisory.id }}">{{ advisory.external_ref or '&mdash;' }}</a>
+          <a class="ref" href="/advisories/{{ advisory.id }}">{{ advisory.external_ref or '—' }}</a>
           {{ m.flag_dot(advisory.flags) }}
           {{ m.ioc_summary(ioc_breakdowns.get(advisory.id)) }}
           <span class="title">{{ advisory.title }}</span>

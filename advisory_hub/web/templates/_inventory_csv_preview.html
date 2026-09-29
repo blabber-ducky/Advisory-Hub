@@ -47,9 +47,9 @@
         {% for row in preview.preview_rows %}
         <tr>
           <td>{{ row.line_number }}</td>
-          <td>{{ row.vendor or '&mdash;' }}</td>
+          <td>{{ row.vendor or '—' }}</td>
           <td>{{ row.product }}</td>
-          <td>{{ row.version or '&mdash;' }}</td>
+          <td>{{ row.version or '—' }}</td>
           <td>{{ row.device_count }}</td>
           <td>{{ row.kind }}</td>
         </tr>

@@ -18,8 +18,8 @@
             {% for cve in advisory.cves | sort(attribute='cve_id') %}
             <tr>
               <td class="ioc-value">{{ cve.cve_id }}</td>
-              <td>{{ cve.cvss_v3_score if cve.cvss_v3_score is not none else '&mdash;' }}</td>
-              <td>{{ cve.cvss_v4_score if cve.cvss_v4_score is not none else '&mdash;' }}</td>
+              <td>{{ cve.cvss_v3_score if cve.cvss_v3_score is not none else '—' }}</td>
+              <td>{{ cve.cvss_v4_score if cve.cvss_v4_score is not none else '—' }}</td>
               <td style="font-size:.76rem;color:var(--muted)">{{ cve.found_in | join(', ') }}</td>
               <td>
                 {% if cve.enrichment_status.value == 'OK' %}<span class="badge badge-good">Enriched</span>
@@ -43,10 +43,10 @@
           <tbody>
             {% for p in advisory.products %}
             <tr>
-              <td>{{ p.vendor or '&mdash;' }}</td>
+              <td>{{ p.vendor or '—' }}</td>
               <td>{{ p.product }}</td>
-              <td style="font-family:ui-monospace,monospace;font-size:.78rem">{{ p.version_expression or '&mdash;' }}</td>
-              <td style="font-family:ui-monospace,monospace;font-size:.78rem">{{ p.fixed_version or '&mdash;' }}</td>
+              <td style="font-family:ui-monospace,monospace;font-size:.78rem">{{ p.version_expression or '—' }}</td>
+              <td style="font-family:ui-monospace,monospace;font-size:.78rem">{{ p.fixed_version or '—' }}</td>
               <td><span class="badge badge-neutral">{{ p.source_of_claim.value | replace('_', ' ') | title }}</span></td>
             </tr>
             {% endfor %}
@@ -154,13 +154,13 @@
         <h3>Details</h3>
         <dl class="kv">
           <dt>Source</dt><dd>{{ advisory.source.name }}</dd>
-          <dt>Reference</dt><dd>{{ advisory.external_ref or '&mdash;' }}</dd>
+          <dt>Reference</dt><dd>{{ advisory.external_ref or '—' }}</dd>
           <dt>Type</dt><dd>{{ m.type_badge(advisory.type.value) }} <span style="color:var(--muted);font-size:.78rem">({{ (advisory.type_confidence * 100) | round | int if advisory.type_confidence is not none else '?' }}% confidence)</span></dd>
-          <dt>Regulator's own type</dt><dd style="color:var(--muted)">{{ advisory.source_type_raw or '&mdash;' }}</dd>
-          <dt>CVSS (highest)</dt><dd>{{ advisory.cvss_score if advisory.cvss_score is not none else '&mdash;' }}</dd>
-          <dt>Upstream reference</dt><dd>{{ advisory.upstream_reference or '&mdash;' }}</dd>
+          <dt>Regulator's own type</dt><dd style="color:var(--muted)">{{ advisory.source_type_raw or '—' }}</dd>
+          <dt>CVSS (highest)</dt><dd>{{ advisory.cvss_score if advisory.cvss_score is not none else '—' }}</dd>
+          <dt>Upstream reference</dt><dd>{{ advisory.upstream_reference or '—' }}</dd>
           <dt>Received</dt><dd>{{ advisory.received_at.strftime('%Y-%m-%d %H:%M UTC') }}</dd>
-          <dt>Published</dt><dd>{{ advisory.published_at.strftime('%Y-%m-%d') if advisory.published_at else '&mdash;' }}</dd>
+          <dt>Published</dt><dd>{{ advisory.published_at.strftime('%Y-%m-%d') if advisory.published_at else '—' }}</dd>
         </dl>
       </div>
 

@@ -7,9 +7,9 @@
           <dt>Kind</dt><dd>{{ source.kind.value | replace('_', ' ') | title }}</dd>
           <dt>Mode</dt><dd>{{ source.mode.value | title }}</dd>
           <dt>Has credential</dt><dd>{{ 'Yes' if source.credential_id else 'No' }}</dd>
-          <dt>Base URL</dt><dd>{{ source.config.get('base_url', '&mdash;') if source.config else '&mdash;' }}</dd>
-          <dt>Sync schedule</dt><dd>{{ source.schedule_cron or '&mdash;' }}</dd>
-          <dt>Last sync error</dt><dd>{{ source.last_sync_error or '&mdash;' }}</dd>
+          <dt>Base URL</dt><dd>{{ source.config.get('base_url', '—') if source.config else '—' }}</dd>
+          <dt>Sync schedule</dt><dd>{{ source.schedule_cron or '—' }}</dd>
+          <dt>Last sync error</dt><dd>{{ source.last_sync_error or '—' }}</dd>
         </dl>
       </div>
 

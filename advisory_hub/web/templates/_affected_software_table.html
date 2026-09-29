@@ -27,7 +27,7 @@
       <td><span class="col-title"><span class="ref">{{ row.advisory_external_ref or row.advisory_id }}</span></span></td>
       <td>{{ m.status_badge(row.advisory_status.value) }}</td>
       <td>{{ m.confidence_badge(row.confidence.value) }}</td>
-      <td class="muted" style="font-size:.8rem">{{ row.scanned_at.strftime('%Y-%m-%d %H:%M UTC') if row.scanned_at else '&mdash;' }}</td>
+      <td class="muted" style="font-size:.8rem">{{ row.scanned_at.strftime('%Y-%m-%d %H:%M UTC') if row.scanned_at else '—' }}</td>
     </tr>
     {% endfor %}
   </tbody>

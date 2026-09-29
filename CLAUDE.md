@@ -124,6 +124,18 @@ docker/
 
 Newest first. Update this when work lands.
 
+### 2026-09-29 — Bug fix: empty values rendered as a literal "&mdash;"
+- Every "no value" placeholder written as `{{ x or '&mdash;' }}` (21 places
+  in 7 templates: advisory detail, scan panel, inventory list/detail, CSV
+  preview, Affected Software, tracker) showed the text `&mdash;` in the
+  browser. Jinja autoescapes string literals too, so the entity became
+  `&amp;mdash;`. Now the character itself (`'—'`); no `| safe` needed.
+- New `tests/test_templates.py`: renders `_inventory_detail.html` through
+  the app's own Jinja environment, and scans every template for an HTML
+  entity inside a `{{ }}`/`{% %}` string literal so the pattern can't come
+  back. Both failed before the fix.
+- **Verified**: 592 tests passing; `ruff` and `mypy --strict` clean.
+
 ### 2026-09-29 — Mediclinic light/dark theme
 - **On request** ("dark and light theme according to Mediclinic design and
   colour language"): palette read from mediclinic.ae's own stylesheet, not
