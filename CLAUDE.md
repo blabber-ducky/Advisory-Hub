@@ -112,10 +112,16 @@ advisory_hub/
   mcp/             # MCP server exposing core services as tools (thin)
   worker/          # RQ job definitions and schedules
   cli.py
-docs/
+docs/              # deployment.md is the production guide
 migrations/
 tests/
-docker/
+docker/            # Dockerfile (app+worker image); nginx/ (TLS proxy image + site template)
+scripts/           # https-setup.sh — certificate install at deployment time
+docker-compose.yml           # base stack (pulls images)
+docker-compose.override.yml  # dev: builds locally, reload — auto-applied
+docker-compose.https.yml     # overlay: TLS proxy on the base stack (non-production)
+docker-compose.prod.yml      # production, self-contained — see docs/deployment.md
+.env.example / .env.production.example
 ```
 
 ---
@@ -123,6 +129,43 @@ docker/
 ## 4. Progress log
 
 Newest first. Update this when work lands.
+
+### 2026-09-29 — Production compose file; worker pollers no longer die at start-up
+- **On request**: `docker-compose.prod.yml` — self-contained production
+  stack. HTTPS-only proxy as the sole published service; Postgres/Redis on
+  an internal network; one-shot `migrate` service; required secrets and
+  pinned `IMAGE_TAG` with no defaults; read-only root fs, `cap_drop: ALL`,
+  `no-new-privileges`, resource limits, log rotation. New
+  `.env.production.example` and **`docs/deployment.md`** (install, upgrade,
+  rollback, troubleshooting). D-038. `scripts/https-setup.sh` recognises the
+  production file and won't switch it to the overlay or `disable` it.
+- **Real bug, pre-existing, found by running the production stack**: the
+  worker's three poller threads each did the *first* import of
+  `core.models` concurrently; the import raced and the **inbox and
+  inventory-sync pollers died on start-up** (14/15 fresh interpreters),
+  while the worker still reported healthy — so dropped emails were never
+  auto-ingested. Fixed by `_preload_poller_dependencies()` on the main
+  thread before the pollers start, and by moving each loop's imports inside
+  its `try` so a failure is retried, not fatal. `tests/test_worker_startup.py`
+  (fresh-interpreter tests; failed before the fix).
+- **Real bug, pre-existing**: `docker-compose.yml` passed only a subset of
+  variables to the containers — `VT_API_KEY`, `PDF_*`, `CSV_*`, poll
+  intervals, `FERNET_KEY_PREVIOUS` set in `.env` did nothing. Now
+  `env_file: .env` in every compose file.
+- **Also**: the worker's inherited image HEALTHCHECK probed a port it
+  doesn't serve (always unhealthy); the production file checks
+  `cli check` instead. Tested that a failed migration during a plain
+  `up -d` takes the site down, so upgrades run `run --rm migrate` first.
+  Stale docs corrected: a `scheduler` container that never existed,
+  README status ("implementation not started"), Tailwind/Python 3.14 in the
+  stack line.
+- **Verified**: 594 tests passing; `ruff`/`mypy --strict` clean. Ran the
+  production file for real (local images, proxy excluded — no
+  certificate): migrate → app/worker healthy in 8 s; a real advisory
+  auto-ingested by the inbox poller with PDF extraction under read-only +
+  no capabilities; postgres has no internet route, worker/app do; only the
+  proxy publishes ports; `.env` values reach the containers; missing-secret
+  guards fire. Test stack and volumes removed afterward.
 
 ### 2026-09-29 — CI publishes images to Docker Hub; compose pulls them
 - **On request**: CI's `images` job (after `lint` + `test`) builds and

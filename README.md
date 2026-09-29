@@ -5,14 +5,17 @@ emails your regulators send, parse them (body **and** PDF attachments), track
 remediation status with an enforced audit trail, and — from Phase 2 — scan your
 endpoint inventory to answer "are we actually affected?"
 
-**Status:** planning complete, implementation not started. See
-[docs/roadmap.md](docs/roadmap.md).
+**Status:** Phases 0–2 complete (ingestion, enrichment, tracker, REST API,
+inventory sources and scanning), plus VirusTotal IOC checks, the IOC and
+Affected Software tabs, an admin panel, HTTPS and a production compose file.
+Phase 3 (MCP server, reporting) is next. See [docs/roadmap.md](docs/roadmap.md)
+and the progress log in [CLAUDE.md](CLAUDE.md) §4.
 
 ---
 
 ## What it does
 
-| Capability | Phase |
+| Capability | Phase / status |
 |---|---|
 | Watch a folder for `.eml`/`.msg` dropped by Power Automate | 1 |
 | Parse email headers, body, and PDF attachments; extract CVEs, IOCs, products | 1 |
@@ -25,6 +28,10 @@ endpoint inventory to answer "are we actually affected?"
 | Inventory sources: CSV upload (Desktop Central, Lansweeper, Azure) | 2 |
 | Inventory sources: API integration (Desktop Central, Azure ARM, MS Graph) | 2 |
 | "Scan inventory" from an advisory, with results shown inline | 2 |
+| IOC tab (remediation status, CSV export) and rate-limited bulk VirusTotal checks | Added |
+| Affected Software tab: every product match across the estate | Added |
+| Admin panel: NVD / VirusTotal keys without a restart | Added |
+| HTTPS, Mediclinic light/dark theme, production compose file | Added |
 | MCP server for external dashboards and agent integrations | 3 |
 | Stats/reporting endpoints, SLA tracking, exports | 3 |
 
@@ -41,17 +48,18 @@ Start here, in order:
 | [docs/api-and-mcp.md](docs/api-and-mcp.md) | REST surface, auth, and the MCP server design |
 | [docs/roadmap.md](docs/roadmap.md) | Phased delivery plan with acceptance criteria |
 | [docs/decisions.md](docs/decisions.md) | Settled technical decisions and why |
-| [docs/operations.md](docs/operations.md) | Deploy, backup, config reference, runbooks |
+| [docs/deployment.md](docs/deployment.md) | **Production install, upgrade, rollback** with `docker-compose.prod.yml` |
+| [docs/operations.md](docs/operations.md) | Config reference, backup, runbooks, TLS, image publishing |
 
 [CLAUDE.md](CLAUDE.md) holds standing instructions and the running progress log.
 
 ## Stack
 
-Python 3.14 · FastAPI · PostgreSQL 16 · SQLAlchemy 2 + Alembic · Jinja2 + HTMX +
-Tailwind · Redis + RQ for background work · Docker Compose. No Node toolchain
-required.
+Python 3.13+ · FastAPI · PostgreSQL 16 · SQLAlchemy 2 + Alembic · Jinja2 + HTMX
+(hand-written CSS, no framework) · Redis + RQ for background work · Docker
+Compose, nginx for TLS. No Node toolchain required.
 
-## Quick start
+## Quick start (development)
 
 ```bash
 cp .env.example .env
@@ -68,15 +76,19 @@ open http://localhost:8080
 conveniences (builds from the working tree, published database port, live
 reload, console logs).
 
-Production doesn't build: CI publishes `advisory-hub` and
-`advisory-hub-proxy` to Docker Hub, and compose pulls them. Set
-`IMAGE_NAMESPACE` (and pin `IMAGE_TAG`) in `.env`, then
-`docker compose -f docker-compose.yml pull && docker compose -f docker-compose.yml up -d`
-— see [docs/operations.md §8](docs/operations.md#8-images-and-publishing).
+### Production
 
-For a real deployment, serve it over **HTTPS**: install your certificate with
-`scripts/https-setup.sh install …` and restart — see
-[docs/operations.md §7](docs/operations.md#7-https).
+Use **`docker-compose.prod.yml`** and follow
+[docs/deployment.md](docs/deployment.md). It pulls pinned images that CI
+publishes to Docker Hub (`advisory-hub`, `advisory-hub-proxy`), serves
+HTTPS only, keeps the database and queue off the network, runs migrations
+automatically, and refuses to start with any secret unset.
+
+```bash
+cp .env.production.example .env        # fill in every CHANGE_ME
+scripts/https-setup.sh install --cert … --key … --server-name …
+docker compose pull && docker compose up -d
+```
 
 ### Working on it locally
 

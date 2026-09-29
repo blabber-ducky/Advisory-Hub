@@ -13,6 +13,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$ROOT/.env}"
 COMPOSE_FILES="docker-compose.yml:docker-compose.https.yml"
+PROD_COMPOSE_FILE="docker-compose.prod.yml"   # TLS built in; left as-is
 EXPIRY_WARN_DAYS=30
 CLEANUP=()
 trap 'rm -f ${CLEANUP[@]+"${CLEANUP[@]}"}' EXIT
@@ -32,8 +33,10 @@ Commands
   csr         Generate a private key + certificate signing request for your CA
   self-signed Generate a self-signed certificate (testing / pre-CA only)
   check       Validate the installed certificate (expiry, key match, hostname)
-  enable      Point .env at the HTTPS overlay (certificate must already be installed)
-  disable     Remove the HTTPS overlay from .env (back to plain HTTP on APP_PORT)
+  enable      Point .env at the HTTPS overlay (certificate must already be installed).
+              If .env already uses docker-compose.prod.yml, only SERVER_NAME is set.
+  disable     Remove the HTTPS overlay from .env (back to plain HTTP on APP_PORT).
+              Refused for docker-compose.prod.yml, which is HTTPS-only.
 
 Options
   --server-name NAME   Hostname users browse to, e.g. advisoryhub.corp.example
@@ -157,8 +160,12 @@ cmd_enable() {
   [[ -f "$CERT_DIR/server.crt" && -f "$CERT_DIR/server.key" ]] \
     || die "no certificate in $CERT_DIR — run 'install', 'csr' then 'install', or 'self-signed' first"
   env_set SERVER_NAME "$SERVER_NAME"
-  env_set SESSION_COOKIE_SECURE true
-  env_set COMPOSE_FILE "$COMPOSE_FILES"
+  if [[ "$(env_get COMPOSE_FILE)" == "$PROD_COMPOSE_FILE" ]]; then
+    ok "using $PROD_COMPOSE_FILE (HTTPS built in)"
+  else
+    env_set SESSION_COOKIE_SECURE true
+    env_set COMPOSE_FILE "$COMPOSE_FILES"
+  fi
   [[ "$CERT_DIR" != "$ROOT/certs" ]] && env_set TLS_CERT_DIR "$CERT_DIR"
   echo
   info "HTTPS is configured. Start or restart the stack:"
@@ -261,11 +268,16 @@ cmd_check() {
   validate "$CERT_DIR/server.crt" "$CERT_DIR/server.key" "$SERVER_NAME"
   info "subject: $(openssl x509 -in "$CERT_DIR/server.crt" -noout -subject | sed 's/^subject=//')"
   info "issuer:  $(openssl x509 -in "$CERT_DIR/server.crt" -noout -issuer | sed 's/^issuer=//')"
-  [[ "$(env_get COMPOSE_FILE)" == "$COMPOSE_FILES" ]] && ok ".env uses the HTTPS overlay" \
-    || warn ".env does not use the HTTPS overlay — run 'enable'"
+  case "$(env_get COMPOSE_FILE)" in
+    "$PROD_COMPOSE_FILE") ok ".env uses $PROD_COMPOSE_FILE (HTTPS built in)" ;;
+    "$COMPOSE_FILES")     ok ".env uses the HTTPS overlay" ;;
+    *)                    warn ".env uses neither the production file nor the HTTPS overlay — run 'enable'" ;;
+  esac
 }
 
 cmd_disable() {
+  [[ "$(env_get COMPOSE_FILE)" == "$PROD_COMPOSE_FILE" ]] \
+    && die "$PROD_COMPOSE_FILE always serves HTTPS — there is nothing to disable"
   env_unset COMPOSE_FILE
   echo
   info "HTTPS overlay removed. Apply with: docker compose up -d --remove-orphans"

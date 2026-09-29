@@ -32,6 +32,17 @@ jobs:
         run: mypy advisory_hub
         env:
           SECRET_KEY: ci-placeholder-not-used-at-import
+      - name: Compose files resolve
+        # Catches a broken compose file on the PR, not on the server.
+        # Dummy values only: this renders the config, it starts nothing.
+        run: |
+          cp .env.production.example .env
+          sed -i -e 's/=CHANGE_ME$/=ci-dummy/' -e 's/^IMAGE_NAMESPACE=.*/IMAGE_NAMESPACE=ci/' .env
+          # Explicit -f everywhere: .env's COMPOSE_FILE would otherwise win.
+          docker compose -f docker-compose.prod.yml config -q
+          docker compose -f docker-compose.yml -f docker-compose.override.yml config -q
+          docker compose -f docker-compose.yml -f docker-compose.https.yml config -q
+          rm .env
 
   test:
     name: Tests

@@ -3,10 +3,11 @@
 Deployment, configuration, and runbooks. Update this doc whenever a container,
 volume, environment variable, or operational step changes.
 
-> Phase 0 is implemented and verified. Ingestion, enrichment, and inventory
-> sections describe the target shape for later phases.
+> **Deploying to production?** Follow [deployment.md](deployment.md) —
+> `docker-compose.prod.yml`, step by step. This doc is the reference it
+> links into: configuration, backups, runbooks, TLS, images.
 
-## 0. Running it
+## 0. Running it (development)
 
 ```bash
 cp .env.example .env
@@ -24,17 +25,23 @@ failures are deliberate: the alternative is issuing forgeable session cookies.
 conveniences: **builds the image from your working tree**, published
 Postgres/Redis ports, live reload, console logging, non-secure cookies.
 
-**Production pulls published images from Docker Hub instead of building**
-(§8). Set `IMAGE_NAMESPACE` (and ideally pin `IMAGE_TAG`) in `.env`, then
-bypass the override:
+**Production uses its own file, `docker-compose.prod.yml`** — pulls
+pinned images from Docker Hub (§8), HTTPS only, hardened, migrations run
+automatically. See [deployment.md](deployment.md). A production host needs
+only that file, `.env`, `scripts/https-setup.sh` and its certificates — not
+the source tree.
 
-```bash
-docker compose -f docker-compose.yml pull
-docker compose -f docker-compose.yml up -d
-```
+| File | Purpose |
+|---|---|
+| `docker-compose.yml` | Base stack. Pulls images; plain HTTP on `APP_PORT` |
+| `docker-compose.override.yml` | Auto-applied in development: builds from the working tree, reload, published DB/Redis ports |
+| `docker-compose.https.yml` | Overlay adding the TLS proxy to the base stack — for trying HTTPS outside production (§7) |
+| `docker-compose.prod.yml` | **Production.** Self-contained; used alone |
 
-A production host needs only the compose files, `.env`, and (for HTTPS)
-`scripts/https-setup.sh` plus its certificates — not the source tree.
+Every file passes the whole `.env` into `app`/`worker`, so any variable in
+§3 can be set there. (Until 2026-09-29 the base file passed only a
+hand-picked subset — `VT_API_KEY`, `PDF_*`, `CSV_*`, the poll intervals and
+`FERNET_KEY_PREVIOUS` set in `.env` silently had no effect under Compose.)
 
 `APP_PORT` (default `8080`), `POSTGRES_PORT`, and `REDIS_PORT` are overridable
 when a port is already taken.
@@ -59,8 +66,11 @@ repo or the image.
 |---|---|---|
 | `app` | `<IMAGE_NAMESPACE>/advisory-hub` (`docker/Dockerfile`) | FastAPI: UI, REST API, MCP HTTP transport |
 | `worker` | same image, different command | RQ worker: ingestion, enrichment, inventory sync, scans |
-| `scheduler` | same image | RQ scheduler for cron-style inventory syncs (Phase 2) |
-| `proxy` | `<IMAGE_NAMESPACE>/advisory-hub-proxy` (`docker/nginx/Dockerfile`) | **HTTPS overlay only** (`docker-compose.https.yml`): nginx with the site config baked in; terminates TLS, redirects HTTP → HTTPS, proxies to `app`. See §7. |
+| `migrate` | same image | **Production file only.** Runs `alembic upgrade head` and exits; `app`/`worker` start only after it succeeds |
+| `proxy` | `<IMAGE_NAMESPACE>/advisory-hub-proxy` (`docker/nginx/Dockerfile`) | **Production file and HTTPS overlay only**: nginx with the site config baked in; terminates TLS, redirects HTTP → HTTPS, proxies to `app`. See §7. |
+
+Inventory syncs are scheduled by a poller thread inside `worker` — there is
+no separate scheduler container.
 | `postgres` | `postgres:16-alpine` | System of record |
 | `redis` | `redis:7-alpine` | Job queue, NVD cache, rate limiting |
 
@@ -117,8 +127,11 @@ Every variable belongs in `.env.example` with a dummy value and a comment.
 | `INVENTORY_SYNC_POLL_SECONDS` | no | Default `300` — how often the worker checks active API sources for a due `schedule_cron` |
 | `IMAGE_NAMESPACE` | yes (production) | **Compose-level.** Docker Hub user/org the images are pulled from, e.g. `acme` → `acme/advisory-hub`. Unset → `localhost/…`: only locally built images work, and a pull fails loudly rather than fetching from someone else's namespace. See §8. |
 | `IMAGE_TAG` | recommended | **Compose-level.** Image tag for `app`/`worker`/`proxy`. Default `latest`; pin a release (`1.4.0`) or commit (`sha-1a2b3c4`) in production. |
+| `WEB_CONCURRENCY` | no | **Production file.** uvicorn processes for `app`. Default `1`; each extra costs ~100 MB — raise `app`'s memory limit in `docker-compose.prod.yml` to match |
+| `BIND_ADDRESS` | no | **Compose-level, production file.** Host interface the proxy listens on. Default `0.0.0.0`; set the internal NIC's address to keep it off other interfaces |
+| `POSTGRES_PASSWORD` | yes (production) | **Compose-level.** Database password, embedded in `DATABASE_URL` by compose — use hex (`openssl rand -hex 32`) so it's URL-safe. Only read when the database volume is first created |
 | `SESSION_COOKIE_SECURE` | no | Default `true`; `false` only for local HTTP dev. The HTTPS overlay forces `true`. |
-| `COMPOSE_FILE` | HTTPS only | **Compose-level.** `docker-compose.yml:docker-compose.https.yml` — written by `scripts/https-setup.sh` so plain `docker compose …` uses the HTTPS overlay. Also stops `docker-compose.override.yml` being applied, which is what you want in production. |
+| `COMPOSE_FILE` | production / HTTPS | **Compose-level.** Which compose file(s) plain `docker compose …` uses. `docker-compose.prod.yml` in production (set by `.env.production.example`); `docker-compose.yml:docker-compose.https.yml` for the HTTPS overlay (written by `scripts/https-setup.sh`, which leaves a production value alone). Either one also stops `docker-compose.override.yml` being applied. |
 | `SERVER_NAME` | HTTPS only | **Compose-level.** Hostname users browse to; must be in the certificate's subjectAltName. |
 | `HTTP_PORT` / `HTTPS_PORT` | no | **Compose-level.** Host ports for the proxy. Default `80` / `443`. |
 | `TLS_CERT_DIR` | no | **Compose-level.** Host directory with `server.crt` + `server.key`, mounted read-only into the proxy. Default `./certs` (git-ignored). |
@@ -152,7 +165,11 @@ is a hypothesis.
 2. Does it end in `.eml`/`.msg`? The watcher ignores anything else — check the
    flow is doing the `.tmp` → rename dance and not leaving the temp extension.
 3. Check `/data/failed/` for the file plus its `.error.json` sidecar.
-4. `docker compose logs worker --tail 200`.
+4. `docker compose logs worker --tail 200`. Look specifically for
+   `Exception in thread inbox-poller` — a dead poller thread doesn't make the
+   worker unhealthy, it just stops ingesting. `docker compose restart worker`
+   recovers it; then report the traceback. (Start-up import races killed it
+   on most starts until 2026-09-29.)
 5. If it was ingested before, dedupe skipped it by design — search by
    `Message-ID` to find the existing advisory.
 
@@ -233,6 +250,7 @@ Minimum viable signals:
 
 | Signal | Alert when |
 |---|---|
+| `Exception in thread` in worker logs | Any — a background poller (inbox, enrichment, inventory sync) has died while the worker still reports healthy |
 | Files in `/data/failed` | `> 0` for more than 1 hour |
 | Oldest unprocessed file in `/data/inbox` | Older than 10 minutes |
 | RQ queue depth | Growing over 30 minutes |
@@ -248,10 +266,12 @@ failures worth alerting on.
 
 ## 7. HTTPS
 
-HTTPS is an **overlay**, not a rebuild: `docker-compose.https.yml` adds an
-nginx `proxy` container in front of `app`. Certificates are **never** stored
-in the repo or generated at build time — they are installed per deployment
-with `scripts/https-setup.sh`, into `./certs/` (git-ignored) by default.
+**`docker-compose.prod.yml` always serves HTTPS** through its `proxy` — for
+production you only need the certificate steps below (§7.1–7.3). Outside
+production, `docker-compose.https.yml` adds the same proxy to the base stack
+as an **overlay**. Either way, certificates are **never** stored in the repo
+or generated at build time — they are installed per deployment with
+`scripts/https-setup.sh`, into `./certs/` (git-ignored) by default.
 
 ```
 browser ──HTTPS :443──▶ proxy (nginx, TLS) ──HTTP :8000──▶ app
@@ -399,23 +419,12 @@ pointing here, rather than silently skipping the publish. The repositories
 are created on first push; **set them to private on Docker Hub** if the
 images shouldn't be public — the image contains the full application code.
 
-### 8.3 Deploying and upgrading a host
+### 8.3 Deploying, upgrading, rolling back
 
-```bash
-# .env on the host
-IMAGE_NAMESPACE=acme
-IMAGE_TAG=1.4.0          # pin; avoid `latest` in production
-
-docker login                         # only if the repositories are private
-docker compose pull                  # add -f docker-compose.yml unless COMPOSE_FILE is set
-docker compose up -d
-docker compose exec app alembic upgrade head
-```
-
-**Rollback**: set `IMAGE_TAG` back to the previous tag and `docker compose up
--d`. If the newer release ran a migration, downgrade it first with the
-*newer* image (`docker compose exec app alembic downgrade <rev>`) — the older
-image doesn't know the newer revision.
+Covered step by step in [deployment.md](deployment.md) §3–5. In short: set
+`IMAGE_NAMESPACE` and pin `IMAGE_TAG` in `.env`; upgrade with `docker compose
+pull`, then `docker compose run --rm migrate`, then `docker compose up -d` —
+in that order, so a failed migration never takes the running version down.
 
 ### 8.4 Building locally
 

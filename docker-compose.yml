@@ -1,5 +1,8 @@
 name: advisory-hub
 
+# Base / development stack. For production use docker-compose.prod.yml
+# instead (docs/deployment.md).
+
 x-app-env: &app-env
   DATABASE_URL: postgresql+psycopg://advisory_hub:${POSTGRES_PASSWORD:-advisory_hub_dev}@postgres:5432/advisory_hub
   REDIS_URL: redis://redis:6379/0
@@ -31,6 +34,11 @@ x-app-env: &app-env
 # docker-compose.override.yml (development) builds locally instead.
 x-app-image: &app-image
   image: ${IMAGE_NAMESPACE:-localhost}/advisory-hub:${IMAGE_TAG:-latest}
+  # Pass every .env setting through (VT_API_KEY, PDF_*, CSV_*, poll
+  # intervals, …); `environment` still wins for the keys it sets.
+  env_file:
+    - path: .env
+      required: false
 
 services:
   postgres:
@@ -85,6 +93,14 @@ services:
     <<: *app-image
     environment: *app-env
     command: ["python", "-m", "advisory_hub.worker"]
+    # The image's HEALTHCHECK probes the web port, which the worker doesn't
+    # serve — check what the worker actually depends on instead.
+    healthcheck:
+      test: ["CMD", "python", "-m", "advisory_hub.cli", "check"]
+      interval: 60s
+      timeout: 20s
+      start_period: 30s
+      retries: 3
     volumes:
       - blobs:/data/blobs
       - ${INBOX_HOST_PATH:-inbox}:/data/inbox

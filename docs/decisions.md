@@ -927,6 +927,46 @@ production (`acme/advisory-hub:1.4.0`, no build), and production + HTTPS
 dev stack builds and boots from the override. **Not verified**: an actual
 CI run and push — needs the Docker Hub secrets set on the GitHub repo.
 
+## D-038 — A separate, self-contained production compose file
+
+**Date:** 2026-09-29 · **Status:** Accepted
+
+**Requested**: a production-ready Docker Compose file.
+
+**Decision**: `docker-compose.prod.yml`, used **on its own** (not layered on
+`docker-compose.yml`), selected through `COMPOSE_FILE` in the production
+`.env`. Hardening and topology are tabled in docs/deployment.md §1.
+
+**Why a separate file rather than another overlay**: overlays can add and
+`!reset` keys, but production differs from the base in almost every
+service — required secrets instead of dev defaults, no published app port,
+split networks, read-only filesystems, a migrate container, resource
+limits. As an overlay, the effective config would only be knowable by
+running `docker compose config`; as one file, the production shape is what
+you read. The cost — some duplication with the base file — is accepted.
+
+**Choices within it**:
+
+| Choice | Reason |
+|---|---|
+| `IMAGE_TAG` required, no `latest` default | Every host runs a known, reproducible build |
+| One-shot `migrate` service | Migrations happen exactly once per `up`, before app/worker, instead of by hand |
+| Upgrades run `docker compose run --rm migrate` **before** `up -d` | Tested: if `migrate` fails during a plain `up -d`, Compose has already removed the old app/worker and doesn't start the new ones — an outage. Migrating first leaves the old version serving |
+| `backend` network `internal: true` | Postgres/Redis never need the internet; verified they can't reach it |
+| app on a non-internal network | Interactive VirusTotal checks and "Test connection" call out from the request |
+| `read_only` + `/tmp` tmpfs + `cap_drop: ALL` on app/worker/migrate | They parse hostile input. Verified a real advisory (PDF extraction in the sandboxed subprocess) ingests under these |
+| Proxy keeps default capabilities | nginx's master binds 80/443 then drops privileges itself; not narrowed without a certificate to test against |
+| Worker healthcheck = `cli check` | The image's HEALTHCHECK probes the web port the worker doesn't serve, so the worker was *never* healthy under the old config |
+| `WEB_CONCURRENCY` default 1 | An internal team's load; ~83 MB idle per process measured |
+| Redis `--appendonly yes`, `noeviction` | It is the job queue — eviction or loss on restart would drop queued VirusTotal checks |
+| `env_file: .env` plus pinned `environment` | Every documented setting reaches the containers, while values that must not vary (paths, `ENVIRONMENT`, `DATABASE_URL`) can't be overridden from `.env` |
+
+**Found while building it**: the base `docker-compose.yml` had the same
+passthrough gap — only a hand-picked subset of variables reached the
+containers, so `VT_API_KEY`, `PDF_*`, `CSV_*`, the poll intervals and
+`FERNET_KEY_PREVIOUS` in `.env` had no effect under Compose. Fixed with the
+same `env_file` approach.
+
 ---
 
 ## Open decisions

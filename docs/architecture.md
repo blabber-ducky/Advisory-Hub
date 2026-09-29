@@ -62,6 +62,12 @@
                    NVD API 2.0  ·  Desktop Central  ·  Azure ARM / MS Graph
 ```
 
+In production (`docker-compose.prod.yml`) an nginx `proxy` terminates TLS in
+front of `app` and is the only published service; Postgres and Redis sit on
+an internal network with no outside route; a one-shot `migrate` container
+applies migrations before `app`/`worker` start. Topology and hardening are
+in [deployment.md](deployment.md) §1.
+
 ## 3. Components
 
 ### 3.1 `core/` — the service layer
