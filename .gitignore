@@ -1,4 +1,6 @@
 Advisory/
+# Real inventory exports (Endpoint Central, Lansweeper) — internal estate data
+Inventory/
 *.msg
 *.eml
 data/

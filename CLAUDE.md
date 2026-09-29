@@ -1013,3 +1013,8 @@ Health"**.
   in fixtures should be replaced with RFC 5737 documentation IPs and
   `example.invalid` domains unless the specific value is what's under test.
 - The fixture list is in `docs/ingestion.md` §14.
+
+`Inventory/` holds real software-inventory exports from our estate (Endpoint
+Central, Lansweeper) used to ground Phase 2d. Same rule: **never commit it** —
+it is in `.gitignore`. Inventory test fixtures must be synthetic or redacted
+(no real hostnames, users, or device identifiers).
