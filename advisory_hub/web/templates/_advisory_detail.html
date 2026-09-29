@@ -1,0 +1,182 @@
+{% import "_macros.html" as m %}
+<div class="detail-panel">
+  <div class="detail-grid">
+    <div>
+      {% if advisory.description %}
+      <div class="detail-section">
+        <h3>Overview</h3>
+        <p style="margin:0;font-size:.9rem;line-height:1.6">{{ advisory.description }}</p>
+      </div>
+      {% endif %}
+
+      {% if advisory.cves %}
+      <div class="detail-section">
+        <h3>CVEs ({{ advisory.cves | length }})</h3>
+        <table class="ioc-table">
+          <thead><tr><th>CVE</th><th>CVSS v3</th><th>CVSS v4</th><th>Found in</th><th>NVD status</th></tr></thead>
+          <tbody>
+            {% for cve in advisory.cves | sort(attribute='cve_id') %}
+            <tr>
+              <td class="ioc-value">{{ cve.cve_id }}</td>
+              <td>{{ cve.cvss_v3_score if cve.cvss_v3_score is not none else '&mdash;' }}</td>
+              <td>{{ cve.cvss_v4_score if cve.cvss_v4_score is not none else '&mdash;' }}</td>
+              <td style="font-size:.76rem;color:var(--muted)">{{ cve.found_in | join(', ') }}</td>
+              <td>
+                {% if cve.enrichment_status.value == 'OK' %}<span class="badge badge-good">Enriched</span>
+                {% elif cve.enrichment_status.value == 'NOT_FOUND' %}<span class="badge badge-neutral">Not in NVD</span>
+                {% elif cve.enrichment_status.value == 'ERROR' %}<span class="badge badge-warning">Retry pending</span>
+                {% elif cve.enrichment_status.value == 'SKIPPED_OFFLINE' %}<span class="badge badge-neutral">Offline</span>
+                {% else %}<span class="badge badge-neutral">Pending</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+      {% if advisory.products %}
+      <div class="detail-section">
+        <h3>Affected products ({{ advisory.products | length }})</h3>
+        <table class="product-table">
+          <thead><tr><th>Vendor</th><th>Product</th><th>Version</th><th>Fixed in</th><th>Evidence</th></tr></thead>
+          <tbody>
+            {% for p in advisory.products %}
+            <tr>
+              <td>{{ p.vendor or '&mdash;' }}</td>
+              <td>{{ p.product }}</td>
+              <td style="font-family:ui-monospace,monospace;font-size:.78rem">{{ p.version_expression or '&mdash;' }}</td>
+              <td style="font-family:ui-monospace,monospace;font-size:.78rem">{{ p.fixed_version or '&mdash;' }}</td>
+              <td><span class="badge badge-neutral">{{ p.source_of_claim.value | replace('_', ' ') | title }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+      {% if advisory.iocs %}
+      <div class="detail-section">
+        <h3>Indicators of compromise ({{ advisory.iocs | length }})</h3>
+        {# Every distinct kind, uncapped — unlike the tracker row, this page
+           has the width for the full mix. #}
+        <div style="margin:-.2rem 0 .5rem">{{ m.ioc_summary(ioc_breakdown, max_chips=99) }}</div>
+        <p style="font-size:.78rem;color:var(--muted);margin:0 0 .5rem">
+          Rendered defanged. Do not paste into a browser or resolver.
+        </p>
+        {% set advisory_id = advisory.id %}
+        <table class="ioc-table">
+          <thead><tr><th>Type</th><th>Value</th><th>Status</th><th>VirusTotal</th></tr></thead>
+          <tbody>
+            {% for ioc in advisory.iocs | sort(attribute='ioc_type') %}
+            <tr>
+              <td><span class="badge badge-neutral">{{ ioc.ioc_type.value }}</span></td>
+              <td class="ioc-value">{{ ioc.defanged_value }}</td>
+              <td>
+                {% set effective_status = ioc_effective_statuses.get(ioc.id) %}
+                {% include "_ioc_status_cell.html" %}
+              </td>
+              <td>
+                {% if ioc.ioc_type.value in vt_supported_types %}
+                  {% set lookup = vt_lookups.get(ioc.id) %}
+                  {% include "_vt_result.html" %}
+                {% else %}
+                  <span style="color:var(--muted);font-size:.78rem">&mdash;</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+      {% if advisory.ttps %}
+      <div class="detail-section">
+        <h3>Threat actors &amp; techniques</h3>
+        <div class="chip-list">
+          {% for t in advisory.ttps %}<span class="chip">{{ t.value }}</span>{% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if related %}
+      <div class="detail-section">
+        <h3>Related advisories</h3>
+        {% for rel, other in related %}
+        <div style="font-size:.85rem;margin-bottom:.3rem">
+          <span class="badge badge-warning">{{ rel.kind.value | replace('_', ' ') | title }}</span>
+          <a href="#" style="margin-left:.4rem">{{ other.external_ref }}</a> &mdash; {{ other.title[:70] }}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if advisory.flags %}
+      <div class="detail-section">
+        <h3>Flags</h3>
+        {% for flag in advisory.flags %}
+        <div style="font-size:.85rem;margin-bottom:.4rem">
+          <span class="badge {{ 'badge-neutral' if flag.resolved_at else 'badge-warning' }}">
+            {{ flag.kind.value | replace('_', ' ') | title }}
+          </span>
+          {% if flag.detail %}
+            <span style="color:var(--muted);font-size:.8rem;margin-left:.4rem">
+              {% for k, v in flag.detail.items() %}{{ k }}: {{ v }}{% if not loop.last %} &middot; {% endif %}{% endfor %}
+            </span>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="detail-section">
+        <h3>Attachments</h3>
+        <div class="attachment-list">
+          <a href="/advisories/{{ advisory.id }}/attachments/raw">Original email (.msg)</a>
+          {% for att in advisory.attachments %}
+          <a href="/advisories/{{ advisory.id }}/attachments/{{ att.id }}">
+            {{ att.filename }}
+            {% if att.extraction_method and att.extraction_method.value != 'TEXT_LAYER' %}
+              <span class="badge badge-warning" style="margin-left:.3rem">{{ att.extraction_method.value | replace('_', ' ') | title }}</span>
+            {% endif %}
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div>
+      {% include "_status_form.html" %}
+      {% include "_scan_panel.html" %}
+
+      <div class="detail-section">
+        <h3>Details</h3>
+        <dl class="kv">
+          <dt>Source</dt><dd>{{ advisory.source.name }}</dd>
+          <dt>Reference</dt><dd>{{ advisory.external_ref or '&mdash;' }}</dd>
+          <dt>Type</dt><dd>{{ m.type_badge(advisory.type.value) }} <span style="color:var(--muted);font-size:.78rem">({{ (advisory.type_confidence * 100) | round | int if advisory.type_confidence is not none else '?' }}% confidence)</span></dd>
+          <dt>Regulator's own type</dt><dd style="color:var(--muted)">{{ advisory.source_type_raw or '&mdash;' }}</dd>
+          <dt>CVSS (highest)</dt><dd>{{ advisory.cvss_score if advisory.cvss_score is not none else '&mdash;' }}</dd>
+          <dt>Upstream reference</dt><dd>{{ advisory.upstream_reference or '&mdash;' }}</dd>
+          <dt>Received</dt><dd>{{ advisory.received_at.strftime('%Y-%m-%d %H:%M UTC') }}</dd>
+          <dt>Published</dt><dd>{{ advisory.published_at.strftime('%Y-%m-%d') if advisory.published_at else '&mdash;' }}</dd>
+        </dl>
+      </div>
+
+      <div class="detail-section">
+        <h3>Comments ({{ comments | length }})</h3>
+        <div class="comment-list">
+          {% for c in comments %}
+          <div class="comment">
+            <div class="meta">{{ c.author.display_name if c.author else 'System' }} &middot; {{ c.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+            <div class="body">{{ c.body }}</div>
+          </div>
+          {% else %}
+          <p style="color:var(--muted);font-size:.85rem">No comments yet.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

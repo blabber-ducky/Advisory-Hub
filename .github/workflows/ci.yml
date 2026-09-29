@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  lint:
+    name: Lint & type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - name: ruff check
+        run: ruff check advisory_hub tests migrations
+      - name: ruff format
+        run: ruff format --check advisory_hub tests migrations
+      - name: mypy
+        run: mypy advisory_hub
+        env:
+          SECRET_KEY: ci-placeholder-not-used-at-import
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: advisory_hub
+          POSTGRES_PASSWORD: advisory_hub
+          POSTGRES_DB: advisory_hub_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U advisory_hub"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      SECRET_KEY: ci-secret-key-not-a-placeholder-value
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql+psycopg://advisory_hub:advisory_hub@localhost:5432/advisory_hub_test
+      TEST_DATABASE_URL: postgresql+psycopg://advisory_hub:advisory_hub@localhost:5432/advisory_hub_test
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - name: Run tests
+        run: pytest -q
+      - name: Migrations are reversible
+        # A downgrade that doesn't work is a migration you can't roll back.
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
+      - name: No un-migrated model changes
+        # Fails if someone edited a model without generating a migration.
+        run: |
+          alembic revision --autogenerate -m "drift-check" --rev-id drift 2>/dev/null
+          if grep -qE "op\.(create|drop|alter|add)_" migrations/versions/drift_drift_check.py; then
+            echo "::error::Models have drifted from migrations. Generate one."
+            cat migrations/versions/drift_drift_check.py
+            exit 1
+          fi
+          rm -f migrations/versions/drift_drift_check.py
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

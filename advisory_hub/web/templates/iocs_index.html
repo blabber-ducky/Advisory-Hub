@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+  <h1 style="font-size:1.3rem;margin:0">IOCs</h1>
+  <button
+    type="button"
+    hx-get="/iocs?{{ current_query_string }}"
+    hx-target="#iocs-table-region"
+    hx-swap="innerHTML"
+    hx-indicator="#iocs-refresh-indicator">
+    Refresh
+    <span id="iocs-refresh-indicator" class="htmx-indicator">&hellip;</span>
+  </button>
+</div>
+<p class="muted" style="margin-top:-.7rem;margin-bottom:1rem">
+  Bulk VirusTotal checks run in the background — click "Refresh" to pick up results as they land.
+</p>
+
+<form class="filter-bar" hx-get="/iocs" hx-target="#iocs-table-region" hx-push-url="true">
+  <select name="ioc_type" onchange="this.form.requestSubmit()">
+    <option value="">All types</option>
+    {% for t in types %}
+    <option value="{{ t.value }}" {{ 'selected' if t in filters.ioc_type else '' }}>{{ t.value }}</option>
+    {% endfor %}
+  </select>
+  <select name="status" onchange="this.form.requestSubmit()">
+    <option value="">All statuses</option>
+    {% for s in statuses %}
+    <option value="{{ s.value }}" {{ 'selected' if s in filters.status else '' }}>{{ s.value | replace('_', ' ') | title }}</option>
+    {% endfor %}
+  </select>
+  <input type="search" name="q" placeholder="Search value&hellip;" value="{{ filters.q or '' }}">
+  <button type="submit">Filter</button>
+  {% if filters.ioc_type or filters.status or filters.q %}
+  <a class="clear-link" href="/iocs" hx-get="/iocs" hx-target="#iocs-table-region" hx-push-url="true">Clear</a>
+  {% endif %}
+</form>
+
+<div id="iocs-table-region">
+  {% include "_iocs_table.html" %}
+</div>
+{% endblock %}

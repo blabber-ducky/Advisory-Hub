@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 style="font-size:1.3rem;margin:0 0 .3rem">Admin</h1>
+<p style="color:var(--muted);font-size:.85rem;margin:0 0 1.5rem">
+  Global API integrations. Keys set here take priority over the equivalent
+  environment variable and apply immediately — no restart needed.
+</p>
+
+{% if form_error %}
+<p class="error" role="alert">{{ form_error }}</p>
+{% endif %}
+
+{% for item in integrations %}
+{% set kind = item.kind %}
+{% set row = item.row %}
+{% set resolved = item.resolved %}
+<div class="card" style="margin-bottom:1.2rem">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <h3 style="margin:0">{{ kind.value | title if kind.value != 'NVD' else 'NVD' }}</h3>
+    {% if resolved.enabled %}
+      <span class="badge badge-good">Enabled</span>
+    {% else %}
+      <span class="badge badge-neutral">Disabled</span>
+    {% endif %}
+  </div>
+
+  <dl class="kv" style="margin-top:.6rem">
+    <dt>Configuration source</dt>
+    <dd>
+      {% if resolved.source == 'admin_panel' %}
+        <span class="badge badge-neutral">Set here</span>
+        {% if row and row.updated_at %}
+          <span style="font-size:.78rem;color:var(--muted)">— last changed {{ row.updated_at.strftime('%Y-%m-%d %H:%M UTC') }}{% if row.updated_by %} by {{ row.updated_by.display_name }}{% endif %}</span>
+        {% endif %}
+      {% elif resolved.source == 'environment' %}
+        <span class="badge badge-neutral">Environment variable</span>
+        <span style="font-size:.78rem;color:var(--muted)">— {{ 'NVD_API_KEY' if kind.value == 'NVD' else 'VT_API_KEY' }}, no admin override set</span>
+      {% else %}
+        <span style="color:var(--muted);font-size:.85rem">Not configured</span>
+      {% endif %}
+    </dd>
+    <dt>API key</dt>
+    <dd>{{ 'Configured (write-only — never displayed)' if resolved.api_key else 'Not set' }}</dd>
+  </dl>
+
+  <form class="status-form" hx-post="/admin/integrations/{{ kind.value }}/key" hx-target="body" hx-swap="none" style="margin-top:.8rem">
+    <label for="api_key_{{ kind.value }}">{{ 'Set' if not resolved.api_key or resolved.source != 'admin_panel' else 'Rotate' }} API key</label>
+    <input type="password" name="api_key" id="api_key_{{ kind.value }}" autocomplete="off" placeholder="Paste the key — never shown again after saving">
+    <button type="submit">Save</button>
+  </form>
+
+  <form hx-post="/admin/integrations/{{ kind.value }}/toggle" hx-target="body" hx-swap="none" style="margin-top:.5rem">
+    <button type="submit" class="link">{{ 'Disable' if resolved.enabled else 'Enable' }}</button>
+  </form>
+</div>
+{% endfor %}
+
+<div class="detail-section">
+  <h3>Inventory API integrations</h3>
+  <p style="color:var(--muted);font-size:.85rem">
+    Desktop Central, Azure ARM, and MS Graph credentials are managed per-source
+    under <a href="/inventory">Inventory</a>, not here.
+  </p>
+</div>
+{% endblock %}

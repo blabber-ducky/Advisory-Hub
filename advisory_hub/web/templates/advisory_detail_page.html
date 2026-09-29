@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block content %}
+<p style="margin:0 0 .6rem"><a href="/">&larr; Back to tracker</a></p>
+<h1 style="font-size:1.3rem;margin:0 0 .2rem">
+  {{ advisory.external_ref or advisory.id }}
+  {{ m.status_badge(advisory.status.value) }}
+</h1>
+<p style="margin:0 0 1rem;color:var(--muted)">{{ advisory.title }}</p>
+
+{% include "_advisory_detail.html" %}
+{% endblock %}

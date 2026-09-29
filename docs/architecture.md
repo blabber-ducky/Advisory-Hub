@@ -1,0 +1,327 @@
+# Architecture
+
+## 1. Design goals
+
+1. **Never lose the source of truth.** Regulatory advisories are compliance
+   artefacts. The original `.eml` and every attachment are stored immutably and
+   forever; parsed data is a derived, re-computable view.
+2. **One business-logic layer, many front doors.** The UI, the REST API, and the
+   MCP server are interchangeable adapters over the same service layer. This is
+   what makes the mandatory-comment rule impossible to bypass, and what makes the
+   API and MCP server cheap to build rather than parallel implementations.
+3. **Evidence over assertion.** Parsing and inventory matching are heuristic.
+   Every derived fact carries its method and confidence and is presented as such.
+4. **Untrusted input by default.** Emails and PDFs arrive from outside the
+   organisation. The parser is a sandbox, not a convenience.
+5. **Runs on-prem, air-gap-tolerant.** The only outbound dependency is NVD, and
+   it is optional and degradable.
+
+## 2. System overview
+
+```
+      Regulator                Power Automate
+       mailbox      ───────►   (Office 365 flow)
+                                     │  writes .eml + attachments
+                                     ▼
+                            ┌──────────────────┐
+                            │  /data/inbox     │   mounted volume
+                            └────────┬─────────┘
+                                     │ polled every 30s
+┌────────────────────────────────────┼─────────────────────────────────────┐
+│  Docker Compose                    ▼                                     │
+│                        ┌───────────────────────┐                         │
+│                        │  worker (RQ)          │                         │
+│                        │  ├ inbox watcher      │                         │
+│                        │  ├ email/PDF parser ──┼──► sandboxed subprocess │
+│                        │  ├ NVD enrichment     │        (no network)     │
+│                        │  └ inventory sync     │                         │
+│                        └───────┬───────────────┘                         │
+│                                │                                         │
+│   ┌────────────────────────────┼─────────────────────────────────┐       │
+│   │  app (FastAPI)             ▼                                 │       │
+│   │  ┌─────────┐  ┌────────┐  ┌──────────────────────────────┐   │       │
+│   │  │ web/    │  │ api/   │  │ mcp/  (stdio + HTTP)         │   │       │
+│   │  │ HTMX UI │  │ REST   │  │ tools for dashboards/agents  │   │       │
+│   │  └────┬────┘  └───┬────┘  └──────────────┬───────────────┘   │       │
+│   │       └───────────┴──────────┬───────────┘                   │       │
+│   │                              ▼                               │       │
+│   │                   ┌─────────────────────┐                    │       │
+│   │                   │  core/  services    │  ◄── ALL rules     │       │
+│   │                   └──────────┬──────────┘                    │       │
+│   └──────────────────────────────┼───────────────────────────────┘       │
+│                                  ▼                                       │
+│              ┌───────────────┐  ┌────────────┐  ┌──────────────┐         │
+│              │ PostgreSQL 16 │  │ Redis      │  │ /data/blobs  │         │
+│              │ (system of    │  │ (queue +   │  │ (content-    │         │
+│              │  record)      │  │  cache)    │  │  addressed)  │         │
+│              └───────────────┘  └────────────┘  └──────────────┘         │
+└──────────────────────────────────────────────────────────────────────────┘
+                                     │
+                          optional outbound (allowlisted)
+                                     ▼
+                   NVD API 2.0  ·  Desktop Central  ·  Azure ARM / MS Graph
+```
+
+## 3. Components
+
+### 3.1 `core/` — the service layer
+
+The only place business rules exist. Everything else calls into it.
+
+| Service | Responsibility |
+|---|---|
+| `advisories` | CRUD, search, filtering, the **`change_status()`** chokepoint |
+| `comments` | Free comments and status-linked comments |
+| `sources` | Regulator/source registry, sender-domain → source mapping |
+| `enrichment` | NVD lookup orchestration and cache policy |
+| `inventory` | Source config, credential handling, snapshot lifecycle |
+| `scan` | Advisory × inventory matching, scan run lifecycle |
+| `stats` | Aggregations for dashboard and reporting endpoints |
+| `audit` | Append-only event log |
+| `auth` | Users, roles, sessions, API tokens (SSO-swappable) |
+
+Services take a DB session, enforce authorisation, emit audit records, and return
+plain domain objects. They know nothing about HTTP, HTML, or MCP.
+
+### 3.2 `ingest/` — the pipeline
+
+Detailed in [ingestion.md](ingestion.md). Summary: watcher → dedupe → blob store
+→ sandboxed parse → extract → classify → persist → enqueue enrichment.
+
+### 3.3 `web/` — the UI
+
+Server-rendered Jinja2 with HTMX for interactivity. Chosen because the three
+interactive needs — expand-a-row, inline status edit with a forced comment, and
+"scan inventory" results appearing in place — are all naturally HTML-fragment
+swaps. No Node build step, one deployable, one language.
+
+- **Tracker + dashboard** (`/`): KPI tiles above a filterable table with columns
+  Source · Type · Title · Description · Status · Last comment. Rows expand to a
+  detail panel loaded as an HTMX partial. The Title cell carries an IOC
+  indicator — a total ("38 IOCs") plus one chip per distinct kind of
+  indicator (`IP`, `Domain`, `MD5`, …), up to four with a `+N` overflow
+  whose tooltip still names every kind. A sort picker in the filter bar
+  offers, alongside date and severity, **Most/Fewest IOC types** and
+  **Most/Fewest IOCs**; the two rank differently on purpose — see the table
+  in §3.3.1. A "Scan inbox now" button
+  (ANALYST+, `POST /inbox/scan`) runs `ingest.pipeline.process_inbox()`
+  immediately rather than waiting for the worker's background poller's next
+  sweep — the same function the poller and `advisory-hub watch` call, safe
+  to run concurrently since `Inbox.claim()`'s atomic rename means only one
+  caller ever wins a given file.
+- **Inventory** (`/inventory`): source configuration, CSV upload, sync history.
+- **Affected Software** (`/affected-software`): one row per product match from
+  each advisory's most recent completed scan — Product · Version · Affected
+  hosts · Severity · Advisory · Status. "Refresh" reloads the table with no
+  side effects; "Refresh all (re-scan)" re-runs `scan.refresh_all_scans()`
+  against every already-scanned advisory's inventory sources' current latest
+  snapshots.
+- **IOCs** (`/iocs`): every indicator across every advisory, with a remediation
+  status (DUE/BLOCKED/IN_PROGRESS/RESOLVED — defaults to tracking the parent
+  advisory's own status, overridable per indicator; see D-034), a multi-select
+  bulk "Check on VirusTotal" action that queues rate-limited RQ jobs rather
+  than calling VirusTotal synchronously, a "Refresh" button to reload the
+  table (bulk VT results land asynchronously), and a CSV export
+  (`/iocs/export`, honours the tab's current filters) that includes each
+  indicator's cached VirusTotal result alongside its defanged value.
+- **Admin** (`/admin`, ADMIN role only): per-integration enable toggle and
+  write-only key rotation for NVD and VirusTotal.
+
+#### 3.3.1 Sorting the tracker by IOCs
+
+Two different questions, two different sort keys. Against the real 135-message
+corpus they pick different advisories as "the biggest":
+
+| Sort key | Ranks by | Top advisory in the real corpus |
+|---|---|---|
+| `-ioc_type_count` | Distinct **kinds** of indicator | 38 IOCs across **4** kinds (Domain 15, MD5 11, IPv4 10, SHA256 2) |
+| `-ioc_count` | Total **number** of indicators | **72** IOCs across 3 kinds |
+
+The kind count is the one that predicts effort: six SHA256 hashes is a single
+blocklist update, while two hashes, two domains, an IP and a registry key is
+four separate controls to touch. The raw total is the one that predicts volume.
+
+Both are computed by `LEFT JOIN`ing a `GROUP BY advisory_id` aggregate over
+`advisory_ioc` and ordering on `COALESCE(…, 0)`, so:
+
+- advisories with **no** IOCs are still listed (left, not inner, join), and
+  sort as `0` rather than as `NULL` — which Postgres would otherwise place
+  *first* on a descending sort;
+- the join can never fan one advisory out into several rows, because the
+  aggregate has one row per `advisory_id`;
+- ties — which dominate, since most advisories carry no IOCs at all — fall
+  back to the default newest-first order rather than an arbitrary one.
+
+Unknown sort keys fall back to the default (`normalise_sort()`); the key never
+reaches SQL as anything but a lookup into a fixed table.
+
+### 3.4 `api/` — REST
+
+`/api/v1`, OpenAPI 3.1 auto-generated at `/api/docs`. Session cookie for the UI,
+bearer tokens for integrations. Same services, same rules — a `PATCH` to change
+status without a comment returns `422`, exactly as the UI blocks it.
+
+### 3.5 `mcp/` — MCP server
+
+A separate process built on the official `mcp` Python package, exposing the same
+services as tools over stdio and streamable HTTP. It contains no logic of its
+own. See [api-and-mcp.md](api-and-mcp.md).
+
+### 3.6 Storage
+
+| Store | Holds | Why |
+|---|---|---|
+| PostgreSQL | All structured data, full-text search (`tsvector`), JSONB for parsed blobs and integration config | Concurrent writers, real FTS, JSONB |
+| Blob volume | Original `.eml`, attachments, extracted text — keyed by SHA-256 | Immutable, deduplicated, re-parseable |
+| Redis | RQ job queue, NVD response cache, rate-limit counters | Ephemeral by design |
+
+## 4. Key flows
+
+### 4.1 Ingestion
+
+```
+file appears → sha256 → seen before?
+   yes → link to existing advisory, stop (idempotent)
+   no  → move to processing/ → store blobs → sandboxed parse
+       → extract CVEs, IOCs, products, CVSS → classify type
+       → resolve source from sender domain → persist advisory (status = NEW)
+       → archive/ + enqueue NVD enrichment
+   failure at any step → failed/ + .error.json sidecar + admin-visible alert
+```
+
+Nothing is deleted. `archive/` and `failed/` both retain the original.
+
+### 4.2 Status change (the enforced path)
+
+```
+UI / API / MCP
+      └─► core.services.advisories.change_status(
+              advisory_id, to_status, comment_body, actor)
+
+          BEGIN
+            validate transition is legal for the current status
+            reject empty/whitespace comment          → 422
+            INSERT comment
+            INSERT status_change (comment_id NOT NULL)
+            UPDATE advisory.status
+            INSERT audit_log
+          COMMIT
+```
+
+The comment is required at three layers: the UI disables Save until non-empty,
+the service raises, and `status_change.comment_id` is `NOT NULL` in the schema.
+Defence in depth, so a future caller cannot regress it.
+
+### 4.3 Inventory scan (Phase 2)
+
+```
+user expands advisory → clicks "Scan inventory"
+   → create scan_run (status = RUNNING), return immediately
+   → worker: for each selected inventory source's latest snapshot
+        for each CVE on the advisory
+          resolve affected products:
+            NVD CPE ranges (preferred)  →  parsed PDF product/version  →  none
+          normalise vendor + product names via alias table
+          compare versions with the tiered comparator
+          record scan_match rows with method + confidence
+   → HTMX polls scan_run; results render inline in the detail panel
+```
+
+Results are grouped **Confirmed / Likely / Possible / Not found**, never a bare
+"vulnerable: yes". See [inventory-matching.md](inventory-matching.md).
+
+## 5. Status model
+
+Revised 2026-08-20 after corpus analysis. The regulator demands **two distinct
+responses** on **two separate clocks** — acknowledgement, then resolution — so
+`ACKNOWLEDGED` is a first-class status, not an implicit step.
+
+```
+                         ┌──────────────► NOT_APPLICABLE ─┐
+                         │                                │
+NEW ──► ACKNOWLEDGED ──► TRIAGED ─┬──► IN_PROGRESS ──► REMEDIATED ──► CLOSED
+ │         ▲                      │         │                          ▲
+ │         │                      ├──► RISK_ACCEPTED ───────────────────┤
+ └─────────┘                      └──► AWAITING_VENDOR ──┘              │
+   ack clock stops           (back to IN_PROGRESS)                      │
+                                                          reopen ───────┘
+```
+
+- **`NEW` → `ACKNOWLEDGED`** stops the acknowledgement clock and records
+  `acknowledged_at` and the channel (email or phone — the regulator accepts
+  either). This is the only transition that may be performed in bulk, because
+  acknowledgement is a receipt, not a judgement.
+- Everything from `TRIAGED` onward runs against the resolution clock.
+- Transitions are validated server-side in `core`. **Every edge requires a
+  comment**, including acknowledgement.
+- `CLOSED` is reopenable to `TRIAGED` — regulators re-issue advisories, as the
+  corpus confirms (`DOH-2026550` → `DOH-2026552` eight hours apart).
+
+**Implemented (2026-08-21):** `core.services.advisories.change_status()` is
+the single chokepoint — see CLAUDE.md §2.2. It row-locks the advisory,
+validates the transition against `ALLOWED_TRANSITIONS`, requires a non-blank
+comment, requires an `ack_channel` when the target is `ACKNOWLEDGED`, writes
+the `comment` and `status_change` rows and the `audit_log` entry in one
+transaction, and updates `acknowledged_at`/`acknowledged_by_id`/`ack_channel`
+on acknowledgement. The web UI's detail-panel status form is the only caller
+so far; the REST API (Phase 1e) will be the second. **Bulk acknowledgement is
+not yet built** — every transition, including acknowledgement, currently goes
+through the single-advisory form.
+
+### SLA clocks
+
+Both start at `received_at`. Thresholds are the regulator's own, embedded in all
+135 emails:
+
+| Priority | Risk level | Acknowledge | Resolve |
+|---|---|---|---|
+| P1 | Critical | **8 h** | **24 h** |
+| P2 | High | **16 h** | **48 h** |
+| P3 | Medium | 72 h (3 working days) | 120 h (5 working days) |
+| P4 | Low | 72 h (3 working days) | 120 h (5 working days) |
+
+At the observed mix (79 Critical / 39 High / 16 Medium over ~5 weeks) roughly
+**59% of advisories carry an 8-hour acknowledgement fuse**. The dashboard's
+primary KPI tile is therefore "unacknowledged, by time remaining" — not total
+open count.
+
+## 6. Authentication and authorisation
+
+Local username/password with Argon2id, behind an `AuthProvider` interface so
+Entra ID OIDC drops in later without touching call sites.
+
+| Role | Can |
+|---|---|
+| Viewer | Read advisories, comments, scan results |
+| Analyst | Viewer + change status, comment, run scans, upload CSV inventory |
+| Admin | Analyst + manage users, sources, inventory integrations, API tokens |
+
+API tokens are scoped (`advisories:read`, `advisories:write`, `inventory:read`,
+`scan:run`, `stats:read`), hashed at rest (only the prefix is stored in clear for
+identification), and shown exactly once at creation.
+
+**Implemented (2026-08-21):** a browser session's role is translated into the
+same scope space via `core.security.tokens.SCOPE_MIN_ROLE`, so
+`Principal.require_scope()` — the single check both the REST API and any
+future MCP tool use — enforces the role table above for session users too,
+not just for API tokens. This closed a real gap found while building the
+REST API: the check previously passed any logged-in user regardless of role.
+
+## 7. Security posture
+
+| Threat | Control |
+|---|---|
+| Malicious PDF (bomb, JS, huge page count) | Sandboxed subprocess, no network, caps on bytes / pages / decompression ratio / wall clock; JS never executed |
+| Malicious HTML email body | Allowlist sanitiser before render; no remote resource loading |
+| Accidental IOC detonation | All IOCs defanged in every rendered surface |
+| SSRF via inventory source URL | Host allowlist, deny link-local/loopback/metadata, no redirects to new hosts |
+| Credential theft | AES-GCM (Fernet) at rest with key from env/KMS; never returned by any endpoint |
+| Unattributable changes | Mandatory comment + `status_change` + append-only `audit_log` |
+| Token leakage | Hashed at rest, scoped, revocable, last-used tracked |
+
+## 8. Deliberate non-goals (for now)
+
+- Not a SIEM, not a scanner. It reads inventory others collect.
+- No agent on endpoints.
+- No automated remediation or patch deployment.
+- No multi-tenancy. One organisation per deployment.

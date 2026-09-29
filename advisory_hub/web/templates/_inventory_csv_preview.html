@@ -1,0 +1,86 @@
+<div id="csv-preview-{{ source_id }}">
+  {% if upload_error %}
+  <p class="error" role="alert">{{ upload_error }}</p>
+  {% elif commit_error %}
+  <p class="error" role="alert">{{ commit_error }} — re-upload the file to try again.</p>
+  {% else %}
+
+  <p style="font-size:.85rem;color:var(--muted);margin:.4rem 0">
+    {{ preview.total_rows }} data row(s) &middot;
+    {{ preview.matched_row_count }} would import &middot;
+    {{ preview.errors | length }}{% if preview.errors|length == 50 %}+{% endif %} failed to parse
+  </p>
+
+  <form hx-post="/inventory/sources/{{ source_id }}/csv/commit"
+        hx-target="#csv-preview-{{ source_id }}" hx-swap="outerHTML" class="status-form">
+    <input type="hidden" name="blob_id" value="{{ preview.blob_id }}">
+
+    <h4 style="margin-bottom:.3rem">Column mapping</h4>
+    {% for field in ['product', 'vendor', 'version', 'device_count'] %}
+    <label for="mapping_{{ field }}">{{ field | replace('_', ' ') | title }}{% if field == 'product' %} <span style="color:var(--danger)">*</span>{% endif %}</label>
+    <select name="mapping_{{ field }}" id="mapping_{{ field }}">
+      <option value="">&mdash; not mapped &mdash;</option>
+      {% for h in preview.headers %}
+      <option value="{{ h }}" {{ 'selected' if preview.mapping.get(field) == h else '' }}>{{ h }}</option>
+      {% endfor %}
+    </select>
+    {% endfor %}
+
+    <details style="margin:.3rem 0">
+      <summary style="cursor:pointer;font-size:.85rem;color:var(--muted)">Operating-system detection (Azure exports only)</summary>
+      {% for field in ['os_indicator', 'os_name', 'os_version'] %}
+      <label for="mapping_{{ field }}">{{ field | replace('_', ' ') | title }}</label>
+      <select name="mapping_{{ field }}" id="mapping_{{ field }}">
+        <option value="">&mdash; not mapped &mdash;</option>
+        {% for h in preview.headers %}
+        <option value="{{ h }}" {{ 'selected' if preview.mapping.get(field) == h else '' }}>{{ h }}</option>
+        {% endfor %}
+      </select>
+      {% endfor %}
+    </details>
+
+    {% if preview.preview_rows %}
+    <h4 style="margin-bottom:.3rem">Preview (first {{ preview.preview_rows | length }} rows)</h4>
+    <table class="ioc-table">
+      <thead><tr><th>Line</th><th>Vendor</th><th>Product</th><th>Version</th><th>Count</th><th>Kind</th></tr></thead>
+      <tbody>
+        {% for row in preview.preview_rows %}
+        <tr>
+          <td>{{ row.line_number }}</td>
+          <td>{{ row.vendor or '&mdash;' }}</td>
+          <td>{{ row.product }}</td>
+          <td>{{ row.version or '&mdash;' }}</td>
+          <td>{{ row.device_count }}</td>
+          <td>{{ row.kind }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    {% if preview.errors %}
+    <h4 style="margin-bottom:.3rem;color:var(--danger)">Rows that failed to parse</h4>
+    <table class="ioc-table">
+      <thead><tr><th>Line</th><th>Reason</th></tr></thead>
+      <tbody>
+        {% for err in preview.errors %}
+        <tr><td>{{ err.line_number }}</td><td>{{ err.message }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    {% if preview.matched_row_count == 0 %}
+    <p class="error" role="alert">
+      No rows matched with the current mapping{% if not preview.mapping.get('product') %} — no
+      "Product" column was auto-detected for this file{% endif %}. Pick the right columns above,
+      then try importing again.
+    </p>
+    {% endif %}
+
+    <button type="submit">
+      Confirm import ({{ preview.matched_row_count }} row{{ 's' if preview.matched_row_count != 1 else '' }})
+    </button>
+  </form>
+  {% endif %}
+</div>

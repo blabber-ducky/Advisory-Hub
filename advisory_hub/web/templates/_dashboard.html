@@ -1,0 +1,34 @@
+{# Dashboard KPI tiles. Each tile is a link that pre-filters the tracker —
+   the dashboard and the table are one surface, not two. #}
+<div class="stat-grid">
+  <a class="stat-tile tone-critical" href="/?open_only=1">
+    <span class="value">{{ stats.total_open }}</span>
+    <span class="label">Open advisories</span>
+  </a>
+  <a class="stat-tile{% if stats.ack_overdue %} tone-critical{% endif %}" href="/?unacknowledged_only=1">
+    <span class="value">{{ stats.unacknowledged }}</span>
+    <span class="label">Unacknowledged{% if stats.ack_overdue %} &middot; {{ stats.ack_overdue }} overdue{% endif %}</span>
+  </a>
+  <a class="stat-tile{% if stats.resolution_overdue %} tone-warning{% endif %}" href="/?open_only=1&overdue=1">
+    <span class="value">{{ stats.resolution_overdue }}</span>
+    <span class="label">Resolution overdue</span>
+  </a>
+  <a class="stat-tile" href="/?type=CVE_ADVISORY">
+    <span class="value">{{ stats.by_type.get('CVE_ADVISORY', 0) }}</span>
+    <span class="label">CVE advisories</span>
+  </a>
+  <a class="stat-tile" href="/?type=THREAT_LANDSCAPE">
+    <span class="value">{{ stats.by_type.get('THREAT_LANDSCAPE', 0) }}</span>
+    <span class="label">Threat landscape</span>
+  </a>
+  <a class="stat-tile" href="/">
+    <span class="value">{{ stats.ingested_this_week }}</span>
+    <span class="label">Ingested this week</span>
+  </a>
+  {% if stats.flagged_for_review %}
+  <a class="stat-tile tone-warning" href="/?flagged=1">
+    <span class="value">{{ stats.flagged_for_review }}</span>
+    <span class="label">Flagged for review</span>
+  </a>
+  {% endif %}
+</div>

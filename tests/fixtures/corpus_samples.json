@@ -1,0 +1,548 @@
+{
+ "single_cve": {
+  "ref": "DOH-2026550",
+  "subject": "[EXTERNAL] Security Advisory :: DOH- 2026550 - Critical Improper Authentication Vulnerability in Apache Doris",
+  "body": "CAUTION: External email. Do not click links or open attachments unless you recognize the sender and know the content is safe\r\n\r\nDear IS Stakeholder,\r\n\r\nKindly pay attention to the following advisory Security A critical security vulnerability, CVE-2026-58319, has been identified in Apache Doris, a high-performance real-time analytical database. The vulnerability is caused by improper authentication in the Frontend (FE) HTTP REST administrative API, allowing certain administrative endpoints to be accessed without authentication. An unauthenticated remote attacker with network access to the Frontend HTTP service could perform unauthorized administrative operations, potentially impacting cluster integrity, stability, and service availability. Successful exploitation could lead to disruption of database operations or denial-of-service (DoS) conditions.\r\n\r\n \r\n\r\nVulnerability/Disclosure Detail:\r\n\r\n \r\n\r\nAffected Product:\r\n\r\nApache Doris\r\n\r\n \r\n\r\nReference:\r\n\r\nOpenwall\r\n\r\n \r\n\r\nDetected on:\r\n\r\n23-July-2026\r\n\r\n \r\n\r\nType:\r\n\r\nVulnerability\r\n\r\n \r\n\r\nRisk level:\r\n\r\nCritical\r\n\r\n \r\n\r\nDescription:\r\n\r\nA critical security vulnerability, CVE-2026-58319, has been identified in Apache Doris, a high-performance real-time analytical database. The vulnerability is caused by improper authentication in the Frontend (FE) HTTP REST administrative API, allowing certain administrative endpoints to be accessed without authentication. An unauthenticated remote attacker with network access to the Frontend HTTP service could perform unauthorized administrative operations, potentially impacting cluster integrity, stability, and service availability. Successful exploitation could lead to disruption of database operations or denial-of-service (DoS) conditions.\r\n\r\n \r\n\r\n \r\n\r\nAction Required:\r\n\r\nApply the recommendations provided in the attached advisory.\r\n\r\n \r\n\r\n \r\n\r\n \r\n\r\nYou are expected to provide two responses for the advisory:\r\n\r\n\r\n1. Acknowledgement: You are required to acknowledge this advisory notification. A response by email or a phone call to be considered as acknowledgement.\r\n2. Resolution: You must provide an update regarding the progress or resolution of the advisory. The update can be either a confirmation of the advisory having been resolved or a definite timeline when you will resolve it.\r\n\r\n\r\n\r\nPriority\r\n\r\nAcknowledgment\r\n(Hours after Advisory Notification)\r\n\r\nResolution\r\n(Hours after Reported)\r\n\r\nP1 - Critical\r\n\r\n8 Hours\r\n\r\n24 Hours\r\n\r\nP2 - High\r\n\r\n16 Hours\r\n\r\n48 Hours\r\n\r\nP3 - Medium\r\n\r\n72 Hours\r\n\r\n(3 Working Days)\r\n\r\n120 Hours\r\n\r\n(5 Working Days)\r\n\r\nP4 - Low\r\n\r\n72 Hours\r\n\r\n(3 Working Days)\r\n\r\n120 Hours\r\n\r\n(5 Working Days)\r\n[signature block removed]\n",
+  "pdf_text": "Classified as Restricted by Department of Health\n\u062a\u0627\u0645\u0648\u0644\u0639\u0645\u0644\u0627 \u0646\u0645\u0623 \u062a\u0627\u064a\u0644\u0645\u0639 \u0632\u0643\u0631\u0645\nSECURITY OPERATIONS CENTER\nADVISORY\nCritical Improper Authentication Vulnerability in Apache Doris\nSeverity: Critical\n+000 0 0000000| soc@example.invalid\nAdvisory Number: DOH- 2026550 Published on: 23-July-2026\nOVERVIEW\nA critical security vulnerability, CVE-2026-58319, has been identified in Apache Doris, a high-\nperformance real-time analytical database.\nTECHNICAL DETAILS\nA critical security vulnerability, CVE-2026-58319, has been identified in Apache Doris, a high-\nperformance real-time analytical database. The vulnerability is caused by improper authentication in\nthe Frontend (FE) HTTP REST administrative API, allowing certain administrative endpoints to be\naccessed without authentication. An unauthenticated remote attacker with network access to the\nFrontend HTTP service could perform unauthorized administrative operations, potentially impacting\ncluster integrity, stability, and service availability. Successful exploitation could lead to disruption of\ndatabase operations or denial-of-service (DoS) conditions.\nVulnerability Details:\n\u2022 CVE-2026-58319 \u2013 Improper Authentication in Apache Doris Frontend HTTP API\n\u2022 CVSS v3.1: 9.1 (Critical)\n\u2022 The vulnerability is caused by improper authentication checks in the Apache Doris Frontend (FE)\nHTTP REST administrative API.\n\u2022 Certain administrative HTTP REST endpoints can be accessed without requiring valid\nauthentication credentials.\n\u2022 A remote attacker with network connectivity to the FE HTTP service can send unauthorized\nadministrative requests.\n\u2022 No authentication or user interaction is required to exploit the vulnerability.\n\u2022 The vulnerability may lead to denial-of-service (DoS) conditions or other operational\ndisruptions.\n\u2022 Apache Doris versions 2.1.0 through versions prior to 3.1.0 are affected.\n\u2022 The issue has been resolved in Apache Doris version 3.1.0.\nAdvisory Number: DOH- 2026550 Published on: 23-July-2026\nRECOMMENDATIONS\n\u2022 Update Apache Doris to fixed version 3.1.0 or later.\n\u2022 Regularly audit your FE HTTP access logs to check for any unauthorized connection attempts or\nadministrative requests from unrecognized IP addresses.\n\u2022 Use network firewalls, security groups, or reverse proxies to ensure the customized / default ports\n(default Port 8030 for HTTP and 8036 for HTTPS) in use are only accessible from trusted internal IP\naddresses or management VPCs.\nREFERENCES:\n\u2022 https://www.openwall.com/lists/oss-security/2026/07/14/3\nPLEASE NOTE\n\u2022 Ensure all changes to the organization\u2019s environment shall be conducted in a controlled manner and\naligned with the established Change Management process.\n\u2022 Please test all patches and IOC in an UAT environment before deploying to production to avoid any\nservice disruptions.\nACTION\n\u2022 Kindly provide us with your feedback base on our recommendations.\n\u2022 Report any incidents detected relating to this advisory.\n\u2022 For inquiries and feedback, please contact DOH SOC at:\no Email: soc@example.invalid\no Phone: +000 0 0000000o Mobile: +000 0 0000000Advisory Number: DOH- 2026550 Published on: 23-July-2026\nThis circular is designed for regulatory procedures and \u064a \u0645\u0644\u0627\u0639\u0644\u0625\u0627 \u0631\u0634\u0646\u0644\u0644 \u0649\u0648\u062a\u062d\u0645\u0643 \u0635\u0635\u062e\u0645 \u0631\u064a\u063a\u0648 \u0629\u064a\u0645\u064a\u0638\u0646\u062a\u0644\u0627 \u062a\u0627\u0621\u0627\u0631\u062c\u0644\u0625\u0644 \u0645\u064a\u0645\u0639\u062a\u0644\u0627 \u0627\u0630\u0647\nshould not be used as content for media publication",
+  "pdf_ok": true,
+  "page_count": 4,
+  "tables": []
+ },
+ "products_table": {
+  "ref": "DOH-2026551",
+  "subject": "[EXTERNAL] Security Advisory :: DOH- 2026551 - MICROSOFT SHAREPOINT SERVER CRITICAL DESERIALIZATION REMOTE CODE EXECUTION",
+  "body": "CAUTION: External email. Do not click links or open attachments unless you recognize the sender and know the content is safe\r\n\r\nDear IS Stakeholder,\r\n\r\nKindly pay attention to the following advisory Security A critical remote code execution vulnerability, CVE-2026-58644, in on-premises Microsoft SharePoint Server is under confirmed active exploitation. The flaw stems from deserialization of untrusted data (CWE-502) and carries a CVSS v3.1 score of 9.8. Microsoft shipped the fix as part of the July 14, 2026 Patch Tuesday release without an initial exploitation flag; CISA subsequently confirmed in-the-wild abuse and added the CVE to its Known Exploited Vulnerabilities (KEV) catalog on July 16, 2026, with a Binding Operational Directive (BOD) 26-04 remediation deadline of July 19, 2026, for FCEB agencies.Microsoft's own advisory describes the exploitation precondition as an attacker already authenticated with at least Site Owner privileges on the target site. Independent vulnerability research from Trend Micro's Zero-Day Initiative (ZDI) and Cisco Talos characterize this CVE - paired with the related bug CVE-2026-50522 - as reachable without authentication or user interaction. This is a genuine discrepancy in public reporting rather than a resolved fact; treat the vulnerability as exploitable by any party who can reach the SharePoint front end, and do not rely on the Site Owner precondition as a compensating control.CVE-2026-58644 was disclosed alongside a broader cluster of on-premises SharePoint flaws being actively abused together - CVE-2026-32201, CVE-2026-45659, and CVE-2026-56164 - which CISA reports are being chained to steal IIS machine keys and establish persistent access following initial RCE. All supported on-premises editions (Subscription Edition, 2019, 2016) are affected. SharePoint Online is not impacted.\r\n\r\n\r\n\r\n\r\nVulnerability/Disclosure Detail:\r\n\r\n \r\n\r\nAffected Product:\r\n\r\nMicrosoft SharePoint Server\r\n\r\n \r\n\r\nReference:\r\n\r\nCisa\r\n\r\n \r\n\r\nDetected on:\r\n\r\n23-July-2026\r\n\r\n \r\n\r\nType:\r\n\r\nVulnerability\r\n\r\n \r\n\r\nRisk level:\r\n\r\nCritical\r\n\r\n \r\n\r\nDescription:\r\n\r\nA critical remote code execution vulnerability, CVE-2026-58644, in on-premises Microsoft SharePoint Server is under confirmed active exploitation. The flaw stems from deserialization of untrusted data (CWE-502) and carries a CVSS v3.1 score of 9.8. Microsoft shipped the fix as part of the July 14, 2026 Patch Tuesday release without an initial exploitation flag; CISA subsequently confirmed in-the-wild abuse and added the CVE to its Known Exploited Vulnerabilities (KEV) catalog on July 16, 2026, with a Binding Operational Directive (BOD) 26-04 remediation deadline of July 19, 2026, for FCEB agencies.Microsoft's own advisory describes the exploitation precondition as an attacker already authenticated with at least Site Owner privileges on the target site. Independent vulnerability research from Trend Micro's Zero-Day Initiative (ZDI) and Cisco Talos characterize this CVE - paired with the related bug CVE-2026-50522 - as reachable without authentication or user interaction. This is a genuine discrepancy in public reporting rather than a resolved fact; treat the vulnerability as exploitable by any party who can reach the SharePoint front end, and do not rely on the Site Owner precondition as a compensating control.CVE-2026-58644 was disclosed alongside a broader cluster of on-premises SharePoint flaws being actively abused together - CVE-2026-32201, CVE-2026-45659, and CVE-2026-56164 - which CISA reports are being chained to steal IIS machine keys and establish persistent access following initial RCE. All supported on-premises editions (Subscription Edition, 2019, 2016) are affected. SharePoint Online is not impacted.\r\n\r\n \r\n\r\n \r\n\r\nAction Required:\r\n\r\nApply the recommendations provided in the attached advisory.\r\n\r\n \r\n\r\n \r\n\r\n \r\n\r\nYou are expected to provide two responses for the advisory:\r\n\r\n\r\n1. Acknowledgement: You are required to acknowledge this advisory notification. A response by email or a phone call to be considered as acknowledgement.\r\n2. Resolution: You must provide an update regarding the progress or resolution of the advisory. The update can be either a confirmation of the advisory having been resolved or a definite timeline when you will resolve it.\r\n\r\n\r\n\r\n\r\nPriority\r\n\r\nAcknowledgment\r\n(Hours after Advisory Notification)\r\n\r\nResolution\r\n(Hours after Reported)\r\n\r\nP1 - Critical\r\n\r\n8 Hours\r\n\r\n24 Hours\r\n\r\nP2 - High\r\n\r\n16 Hours\r\n\r\n48 Hours\r\n\r\nP3 - Medium\r\n\r\n72 Hours\r\n\r\n(3 Working Days)\r\n\r\n120 Hours\r\n\r\n(5 Working Days)\r\n\r\nP4 - Low\r\n\r\n72 Hours\r\n\r\n(3 Working Days)\r\n\r\n120 Hours\r\n\r\n(5 Working Days)\r\n[signature block removed]\n",
+  "pdf_text": "Classified as Restricted by Department of Health\n\u062a\u0627\u0645\u0648\u0644\u0639\u0645\u0644\u0627 \u0646\u0645\u0623 \u062a\u0627\u064a\u0644\u0645\u0639 \u0632\u0643\u0631\u0645\nSECURITY OPERATIONS CENTER\nADVISORY\nMICROSOFT SHAREPOINT SERVER CRITICAL DESERIALIZATION\nREMOTE CODE EXECUTION\nSeverity: Critical\n+000 0 0000000| soc@example.invalid\nAdvisory Number: DOH- 2026551 Published on: 23-July-2026\nOVERVIEW\nA critical remote code execution vulnerability, CVE-2026-58644, in on-premises Microsoft SharePoint\nServer is under confirmed active exploitation. The flaw stems from deserialization of untrusted data\n(CWE-502) and carries a CVSS v3.1 score of 9.8. Microsoft shipped the fix as part of the July 14, 2026\nPatch Tuesday release without an initial exploitation flag; CISA subsequently confirmed in-the-wild\nabuse and added the CVE to its Known Exploited Vulnerabilities (KEV) catalog on July 16, 2026, with a\nBinding Operational Directive (BOD) 26-04 remediation deadline of July 19, 2026, for FCEB agencies.\nMicrosoft's own advisory describes the exploitation precondition as an attacker already authenticated\nwith at least Site Owner privileges on the target site. Independent vulnerability research from Trend\nMicro's Zero-Day Initiative (ZDI) and Cisco Talos characterize this CVE - paired with the related bug CVE-\n2026-50522 - as reachable without authentication or user interaction. This is a genuine discrepancy in\npublic reporting rather than a resolved fact; treat the vulnerability as exploitable by any party who can\nreach the SharePoint front end, and do not rely on the Site Owner precondition as a compensating\ncontrol.CVE-2026-58644 was disclosed alongside a broader cluster of on-premises SharePoint flaws\nbeing actively abused together - CVE-2026-32201, CVE-2026-45659, and CVE-2026-56164 - which CISA\nreports are being chained to steal IIS machine keys and establish persistent access following initial RCE.\nAll supported on-premises editions (Subscription Edition, 2019, 2016) are affected. SharePoint Online is\nnot impacted.\nTECHNICAL DETAILS\nCVE ID: CVE-2026-58644\nOccurred / Disclosed: Published July 14, 2026 (Microsoft July Patch Tuesday); added to CISA KEV July\n16, 2026\nSeverity: CRITICAL\nCVSS Score: 9.8 (CVSS v3.1)\nCWE Category: CWE-502 - Deserialization of Untrusted Data\nCategory: Remote Code Execution (RCE)\nAdvisory Number: DOH- 2026551 Published on: 23-July-2026\nSharePoint fails to properly validate serialized objects submitted over the network before\nreconstructing them into application objects. A specially crafted serialized payload sent to a vulnerable\nendpoint causes the server to instantiate attacker-controlled objects during deserialization, resulting in\narbitrary code execution in the context of the SharePoint application pool. Microsoft rates attack\ncomplexity as low, noting the exploit does not require deep prior knowledge of the target and can be\nrepeated reliably against unpatched instances.\nATTACK VECTOR\nAttacker Profile:\nOpportunistic and targeted actors alike, ranging from ransomware affiliates to APT groups; the reliability\nof deserialization RCE against internet-facing collaboration platforms makes this attractive to both\nsmash-and-grab and long-dwell operators.\nTarget Sector: Any organization running on-premises SharePoint Server (Subscription Edition, 2019,\n2016) exposed to the internet or reachable from a compromised internal segment. Government,\nfinance, healthcare, and education entities with document-heavy collaboration workflows are\ndisproportionately represented among deployments.\nPost-Exploitation Activity: Consistent with the wider SharePoint exploitation wave CISA has flagged\n(CVE-2026-32201, CVE-2026-45659, CVE-2026-56164), observed and expected follow-on behavior\nincludes theft of IIS/ASP.NET machine keys to forge authentication tokens and survive patching; web\nshell deployment for persistence; lateral movement from the SharePoint farm toward Active Directory-\nintegrated services; and staging for ransomware or data exfiltration.\nAttack Chain:\n\u2022 Attackers obtain or compromise a SharePoint account (credential stuffing, phishing, or reuse)\nthat holds Site Owner permissions, or in the unauthenticated-reachable scenario described by\nZDI/Talos, reaches the vulnerable endpoint directly.\n\u2022 Attacker fingerprints the target SharePoint farm to confirm it is running a build below the July\n2026 fixed version.\n\u2022 A crafted request containing a malicious serialized object is submitted to the vulnerable\nSharePoint component.\nAdvisory Number: DOH- 2026551 Published on: 23-July-2026\n\u2022 The server deserializes the payload without adequate validation, instantiating attacker-\ncontrolled code.\n\u2022 Code executes in the SharePoint application pool context; attacker establishes a web shell or\nscheduled task for persistence.\n\u2022 Attacker harvests IIS machine keys and/or pivots toward domain-joined infrastructure for\nlateral movement and further compromise.\nAFFECTED PRODUCTS AND FIXES\nProduct Affected Versions Impacted Fixed Version / Patch Available\nComponent Patch\nSharePoint Builds below Core KB5002891 (build Yes\nServer 2016 16.0.5561.1001 deserialization 16.0.5561.1001)\nhandling\nSharePoint Builds below Core KB5002883 (build Yes\nServer 2019 16.0.10417.20175 deserialization 16.0.10417.20175)\nhandling\nSharePoint Builds below Core KB5002882 (build Yes\nServer 16.0.19725.20434 deserialization 16.0.19725.20434)\nSubscription handling\nEdition\nSharePoint Not affected N/A N/A - Microsoft- Yes\nOnline managed\nRECOMMENDATIONS\n\u2022 Review and restrict Site Owner and high-privilege SharePoint role assignments to reduce potential\naccess vectors.\n\u2022 Minimize direct internet exposure for on-premises SharePoint servers; use a reverse proxy or Web\nApplication Firewall (WAF) to filter anomalous requests.\nAdvisory Number: DOH- 2026551 Published on: 23-July-2026\n\u2022 Rotate IIS/ASP.NET machine keys after patching and completing threat-hunting activities, as a\nprecaution against persistence mechanisms.\nREFERENCES:\n\u2022 https://www.cisa.gov/known-exploited-vulnerabilities-catalog\nPLEASE NOTE\n\u2022 Ensure all changes to the organization\u2019s environment shall be conducted in a controlled manner and\naligned with the established Change Management process.\n\u2022 Please test all patches and IOC in an UAT environment before deploying to production to avoid any\nservice disruptions.\nACTION\n\u2022 Kindly provide us with your feedback base on our recommendations.\n\u2022 Report any incidents detected relating to this advisory.\n\u2022 For inquiries and feedback, please contact DOH SOC at:\no Email: soc@example.invalid\no Phone: +000 0 0000000o Mobile: +000 0 0000000This circular is designed for regulatory procedures and \u064a \u0645\u0644\u0627\u0639\u0644\u0625\u0627 \u0631\u0634\u0646\u0644\u0644 \u0649\u0648\u062a\u062d\u0645\u0643 \u0635\u0635\u062e\u0645 \u0631\u064a\u063a\u0648 \u0629\u064a\u0645\u064a\u0638\u0646\u062a\u0644\u0627 \u062a\u0627\u0621\u0627\u0631\u062c\u0644\u0625\u0644 \u0645\u064a\u0645\u0639\u062a\u0644\u0627 \u0627\u0630\u0647\nshould not be used as content for media publication",
+  "pdf_ok": true,
+  "page_count": 5,
+  "tables": [
+   [
+    [
+     "Product",
+     "Affected Versions",
+     "",
+     "Impacted",
+     "",
+     "",
+     "Fixed Version /",
+     "",
+     "Patch Available"
+    ],
+    [
+     null,
+     null,
+     null,
+     "Component",
+     null,
+     null,
+     "Patch",
+     null,
+     null
+    ],
+    [
+     "SharePoint\nServer 2016",
+     "Builds below\n16.0.5561.1001",
+     "Core\ndeserialization\nhandling",
+     null,
+     null,
+     "KB5002891 (build\n16.0.5561.1001)",
+     null,
+     null,
+     "Yes"
+    ],
+    [
+     "SharePoint\nServer 2019",
+     "Builds below\n16.0.10417.20175",
+     "Core\ndeserialization\nhandling",
+     null,
+     null,
+     "KB5002883 (build\n16.0.10417.20175)",
+     null,
+     null,
+     "Yes"
+    ],
+    [
+     "SharePoint\nServer\nSubscription\nEdition",
+     "Builds below\n16.0.19725.20434",
+     "Core\ndeserialization\nhandling",
+     null,
+     null,
+     "KB5002882 (build\n16.0.19725.20434)",
+     null,
+     null,
+     "Yes"
+    ],
+    [
+     "SharePoint\nOnline",
+     "Not affected",
+     "N/A",
+     null,
+     null,
+     "N/A - Microsoft-\nmanaged",
+     null,
+     null,
+     "Yes"
+    ]
+   ]
+  ]
+ },
+ "prose_versions": {
+  "ref": "DOH-2026558",
+  "subject": "[EXTERNAL] Security Advisory :: DOH- 2026558-Active Exploitation of CheckPoint Critical Flaw (CVE-2026-16232)",
+  "body": "CAUTION: External email. Do not click links or open attachments unless you recognize the sender and know the content is safe\r\n\r\nDear IS Stakeholder,\r\n\r\nKindly pay attention to the following advisory is about CheckPoint addressed a critical vulnerability affecting its Security Management and Multi-Domain Security Management products. The flaw tracked as CVE-2026-16232 (CVSS: 9.1) \u2013 \u2018Improper Authentication\u2019 vulnerability in the CheckPoint SmartConsole login process using an application token, could allow an unauthenticated remote attacker to obtain an application login token and authenticate with full administrative privileges under specific conditions. \r\n\r\n\r\n\r\n\r\nVulnerability/Disclosure Detail:\r\n\r\n\r\n\r\nAffected Product:\r\n\r\nCheckPoint SmartConsole\r\n\r\n \r\n\r\nReference:\r\n\r\nCheckpoint\r\n\r\n \r\n\r\nDetected on:\r\n\r\n26-July-2026\r\n\r\n \r\n\r\nType:\r\n\r\nVulnerability\r\n\r\n \r\n\r\nRisk level:\r\n\r\nCritical\r\n\r\n \r\n\r\nDescription:\r\n\r\nThis advisory is about CheckPoint addressed a critical vulnerability affecting its Security Management and Multi-Domain Security Management products. The flaw tracked as CVE-2026-16232 (CVSS: 9.1) \u2013 \u2018Improper Authentication\u2019 vulnerability in the CheckPoint SmartConsole login process using an application token, could allow an unauthenticated remote attacker to obtain an application login token and authenticate with full administrative privileges under specific conditions. \r\n\r\n \r\n\r\n \r\n\r\nAction Required:\r\n\r\nApply the recommendations provided in the attached advisory.\r\n\r\n \r\n\r\n \r\n\r\n \r\n\r\nYou are expected to provide two responses for the advisory:\r\n\r\n\r\n1. Acknowledgement: You are required to acknowledge this advisory notification. A response by email or a phone call to be considered as acknowledgement.\r\n2. Resolution: You must provide an update regarding the progress or resolution of the advisory. The update can be either a confirmation of the advisory having been resolved or a definite timeline when you will resolve it.\r\n\r\n\r\n\r\n\r\nPriority\r\n\r\nAcknowledgment\r\n(Hours after Advisory Notification)\r\n\r\nResolution\r\n(Hours after Reported)\r\n\r\nP1 - Critical\r\n\r\n8 Hours\r\n\r\n24 Hours\r\n\r\nP2 - High\r\n\r\n16 Hours\r\n\r\n48 Hours\r\n\r\nP3 - Medium\r\n\r\n72 Hours\r\n\r\n(3 Working Days)\r\n\r\n120 Hours\r\n\r\n(5 Working Days)\r\n\r\nP4 - Low\r\n\r\n72 Hours\r\n\r\n(3 Working Days)\r\n\r\n120 Hours\r\n\r\n(5 Working Days)\r\n[signature block removed]\n",
+  "pdf_text": "Classified as Restricted by Department of Health\n\u062a\u0627\u0645\u0648\u0644\u0639\u0645\u0644\u0627 \u0646\u0645\u0623 \u062a\u0627\u064a\u0644\u0645\u0639 \u0632\u0643\u0631\u0645\nSECURITY OPERATIONS CENTER\nADVISORY\nActive Exploitation of CheckPoint Critical Flaw (CVE-2026-16232)\nSeverity: Critical\n+000 0 0000000| soc@example.invalid\nAdvisory Number: DOH-2026558 Published on: 26-Jul-2026\nOVERVIEW\nThis advisory is about CheckPoint addressed a critical vulnerability affecting its Security\nManagement and Multi-Domain Security Management products. The flaw tracked as CVE-2026-\n16232 (CVSS: 9.1) \u2013 \u2018Improper Authentication\u2019 vulnerability in the CheckPoint SmartConsole login\nprocess using an application token, could allow an unauthenticated remote attacker to obtain an\napplication login token and authenticate with full administrative privileges under specific\nconditions.\nTECHNICAL DETAILS\nSuccessful exploitation of the vulnerability could allow an unauthenticated remote attacker to\nobtain an application login token, authenticate with full administrative privileges, and modify\nsecurity policies and security configurations. Remote exploitation requires internet access to the\nManagement Server IP address and a configuration that does not restrict Trusted Clients.\nAFFECTED PRODUCT & VERSIONS:\nCheck Point Security Management and Check Point Multi-Domain Security Management [MDS]\nversions R77.30, R80, R80.10, R80.20, R80.30, R81 R81.10, R81.20, R82, R82.10\nCompromise of a Security Management Server is particularly consequential because it sits at the\ntop of the trust hierarchy. An attacker with administrative access can modify security policies\nacross managed gateways, alter administrator permissions, manipulate VPN configurations, and\npotentially disable or tamper with logging and monitoring. According to Check Point's advisory, the\nvulnerabilities were discovered during a routine internal review, with subsequent analysis\nrevealing that CVE-2026-16232 had been exploited prior to the availability of a patch.\nCheck Point network security products have been targeted by multiple in-the-wild vulnerabilities\nover the past two years. In June 2026, CVE-2026-50751, a critical authentication bypass in Check\nPoint Remote Access VPN, was exploited in the wild and added to the CISA KEV. In May 2024, CVE-\n2024-24919, a high-severity information disclosure vulnerability in Check Point Quantum Security\nAdvisory Number: DOH-2026558 Published on: 26-Jul-2026\nGateways, was also exploited in the wild. Organizations running affected Check Point management\nproducts should apply the available hotfixes on an emergency basis.\nRECOMMENDATIONS\nCheckPoint has released the patch to mitigate vulnerability and strongly recommends all admins\nto upgrade to the latest versions. CheckPoint has shared mitigation steps:\n\u2022 Follow the Check Point Hardening Best Practices Guide.\n\u2022 Limit Trusted Clients (GUI clients) to trusted IP addresses/subnets. To do so:\no In SmartConsole, go to Manage & Settings > Permissions & Administrators > Trusted\nClients. Double-click the client you want to edit.\no In the Trusted Client configuration window that opens, change the settings as needed and.\nMake sure do not use \"Any\" as a Type.\no Click OK.\n\u2022 Protect Management access with Firewall, restrict access to tusted IP addresses, and verify\nthat implied rules for control connections are enabled. This will create an implied rule that will\nprevent management access for non authorized IP addresses.\nREFERENCES\n\u2022 https://support.checkpoint.com/results/sk/sk185169/\nPLEASE NOTE\n\u2022 Ensure all changes to the organization\u2019s environment shall be conducted in a controlled\nmanner and aligned with the established Change Management process.\n\u2022 Please test all patches and IOC in an UAT environment before deploying to production to avoid\nany service disruptions.\nAdvisory Number: DOH-2026558 Published on: 26-Jul-2026\nACTION\n\u2022 Kindly provide us with your feedback based on our recommendations.\n\u2022 Report any incidents detected relating to this advisory.\n\u2022 For inquiries and feedback, please contact DOH SOC at:\no Email: soc@example.invalid\no Phone: +000 0 0000000This circular is designed for regulatory procedures \u064a \u0645\u0644\u0627\u0639\u0644\u0625\u0627 \u0631\u0634\u0646\u0644\u0644 \u0649\u0648\u062a\u062d\u0645\u0643 \u0635\u0635\u062e\u0645 \u0631\u064a\u063a\u0648 \u0629\u064a\u0645\u064a\u0638\u0646\u062a\u0644\u0627 \u062a\u0627\u0621\u0627\u0631\u062c\u0644\u0625\u0644 \u0645\u064a\u0645\u0639\u062a\u0644\u0627 \u0627\u0630\u0647\nand should not be used as content for media\npublication",
+  "pdf_ok": true,
+  "page_count": 4,
+  "tables": []
+ },
+ "field_bleed": {
+  "ref": "DOH-2026562",
+  "subject": "[EXTERNAL] Security Advisory :: DOH- 2026562 - CVE-2026-31694 Linux Kernel FUSE Local Privilege Escalation Vulnerability with Public PoC",
+  "body": "CAUTION: External email. Do not click links or open attachments unless you recognize the sender and know the content is safe\r\n\r\nDear IS Stakeholder,\r\n\r\n \r\n\r\nKindly pay attention to the following advisory Security A Proof-of-Concept (PoC) exploit has been publicly released for CVE-2026-31694, a high-severity local privilege escalation vulnerability affecting the Linux Kernel Filesystem in Userspace (FUSE) subsystem. The vulnerability allows an unprivileged local attacker to exploit flaws within the FUSE implementation to obtain root privileges on affected systems. Please refer to the attached advisory for more details.\r\n\r\n \r\n\r\n \r\n\r\n \r\n\r\nVulnerability/Disclosure Detail:\r\n\r\n \r\n\r\nAffected Product:\r\n\r\nLinux Kernel Filesystem\r\n\r\n\t\r\nReference:\r\n\r\nubuntu.com\r\n\r\n\t\r\nDetected on:\r\n\r\n29-July-2026\r\n\r\n\t\r\nType:\r\n\r\nVulnerability\r\n\r\n\t\r\nRisk level:\r\n\r\nHigh\r\n\r\n\t\r\nSecurity Advisory :: DOH- 2026562 - CVE-2026-31694 Linux Kernel FUSE Local Privilege Escalation Vulnerability with Public PoCDescription:\r\n\r\nA Proof-of-Concept (PoC) exploit has been publicly released for CVE-2026-31694, a high-severity local privilege escalation vulnerability affecting the Linux Kernel Filesystem in Userspace (FUSE) subsystem. The vulnerability allows an unprivileged local attacker to exploit flaws within the FUSE implementation to obtain root privileges on affected systems.\r\n\r\n \r\n\r\nThe public availability of exploit code significantly increases the likelihood of weaponization by threat actors, enabling attackers with local access to compromise Linux servers, cloud workloads, container hosts, and enterprise endpoints. Organizations utilizing Linux systems with FUSE enabled should prioritize remediation and implement appropriate security controls to reduce the risk of privilege escalation attacks.\r\n\r\n\t\t\r\nAction Required:\r\n\r\nApply the recommendations provided in the attached advisory.\r\n\r\n\t\r\n\r\n \r\n\r\n \r\n\r\nYou are expected to provide two responses for the advisory:\r\n\r\n\r\n1. Acknowledgement: You are required to acknowledge this advisory notification. A response by email or a phone call to be considered as acknowledgement.\r\n2. Resolution: You must provide an update regarding the progress or resolution of the advisory. The update can be either a confirmation of the advisory having been resolved or a definite timeline when you will resolve it.\r\n\r\n \r\n\r\n\r\n\r\nPriority\r\n\r\nAcknowledgment\r\n(Hours after Advisory Notification)\r\n\r\nResolution\r\n(Hours after Reported)\r\n\r\nP1 - Critical\r\n\r\n8 Hours\r\n\r\n24 Hours\r\n\r\nP2 - High\r\n\r\n16 Hours\r\n\r\n48 Hours\r\n\r\nP3 - Medium\r\n\r\n72 Hours\r\n\r\n(3 Working Days)\r\n\r\n120 Hours\r\n\r\n(5 Working Days)\r\n\r\nP4 - Low\r\n\r\n72 Hours\r\n\r\n(3 Working Days)\r\n\r\n120 Hours\r\n\r\n(5 Working Days)\r\n[signature block removed]\n",
+  "pdf_text": "Classified as Restricted by Department of Health\n\u062a\u0627\u0645\u0648\u0644\u0639\u0645\u0644\u0627 \u0646\u0645\u0623 \u062a\u0627\u064a\u0644\u0645\u0639 \u0632\u0643\u0631\u0645\nSECURITY OPERATIONS CENTER\nADVISORY\nCVE-2026-31694: Linux Kernel FUSE Local Privilege\nEscalation Vulnerability with Public PoC\nSeverity: High\n+000 0 0000000| soc@example.invalid\nAdvisory Number: DOH- 2026562 Published on: 29-July-2026\nOVERVIEW\nA Proof-of-Concept (PoC) exploit has been publicly released for CVE-2026-31694, a high-severity local privilege\nescalation vulnerability affecting the Linux Kernel Filesystem in Userspace (FUSE) subsystem. The vulnerability\nallows an unprivileged local attacker to exploit flaws within the FUSE implementation to obtain root privileges\non affected systems.\nThe public availability of exploit code significantly increases the likelihood of weaponization by threat actors,\nenabling attackers with local access to compromise Linux servers, cloud workloads, container hosts, and\nenterprise endpoints. Organizations utilizing Linux systems with FUSE enabled should prioritize remediation\nand implement appropriate security controls to reduce the risk of privilege escalation attacks.\nTECHNICAL DETAILS\nCVE: CVE-2026-31694\nSeverity: High\nCVSS: 7.8\nVulnerability Type: Local Privilege Escalation\nDescription:\nCVE-2026-31694 is a local privilege escalation vulnerability affecting the Linux Kernel's Filesystem in Userspace\n(FUSE) subsystem. The flaw allows an unprivileged local user to exploit weaknesses in the FUSE implementation\nto elevate privileges and obtain root-level access.\nThe vulnerability affects the security boundary between user space and kernel space. Successful exploitation\nenables attackers to execute arbitrary code with kernel-level privileges, resulting in complete system\ncompromise.\nA publicly available Proof-of-Concept (PoC) exploit has been released, lowering the barrier for exploitation and\nincreasing the risk of malicious use by threat actors.\nAdvisory Number: DOH- 2026562 Published on: 29-July-2026\nImpact\n\u2022 Successful exploitation may allow attackers to:\n\u2022 Escalate privileges from an unprivileged user to root\n\u2022 Execute arbitrary code with kernel-level privileges.\n\u2022 Disable or bypass security controls.\n\u2022 Establish persistence on compromised systems.\n\u2022 Conduct lateral movement within enterprise environments.\n\u2022 Access, modify, or destroy sensitive data.\n\u2022 Deploy additional malware or ransomware.\nAFFECTED PRODUCTS\nPlatform Affected Versions Fixed Versions\nLinux Kernel (FUSE Vulnerable kernel versions Refer to your Linux\nSubsystem) utilizing the FUSE subsystem distribution vendors\nNote: The vulnerability may affect multiple Linux distributions that ship vulnerable Linux Kernel versions\nwith the FUSE subsystem enabled.\nRECOMMENDATIONS\n\u2022 Upgrade affected Linux systems to vendor-provided kernel versions containing fixes for CVE-2026-31694\nas soon as updates become available.\n\u2022 Restrict or disable FUSE functionality where operationally feasible and limit mount permissions to trusted\nusers only.\n\u2022 Enforce the principle of least privilege by minimizing local user permissions and restricting unnecessary\nshell access.\n\u2022 Enable Linux kernel security mechanisms such as KASLR, SMEP, SMAP, and other supported hardening\nfeatures.\n\u2022 Continuously monitor systems for privilege escalation attempts and suspicious kernel-level activity using\nEndpoint Detection and Response (EDR) solutions.\nAdvisory Number: DOH- 2026562 Published on: 29-July-2026\n\u2022 Review and restrict privileged access mechanisms including sudo, setuid, and setgid binaries.\n\u2022 Ensure container hosts are updated with patched kernel versions and implement container runtime\nsecurity controls.\n\u2022 Perform regular vulnerability assessments to identify Linux systems running vulnerable kernel versions.\n\u2022 Monitor vendor security advisories for updated remediation guidance and apply security updates\nthrough established change management processes.\nREFERENCES:\n\u2022 https://ubuntu.com/security/CVE-2026-31694\n\u2022 https://thehackernews.com/2026/07/new-bad-epoll-linux-kernel-flaw-lets.html\nPLEASE NOTE\n\u2022 Ensure all changes to the organization\u2019s environment shall be conducted in a controlled manner and\naligned with the established Change Management process.\n\u2022 Please test all patches and IOC in an UAT environment before deploying to production to avoid any\nservice disruptions.\nACTION\n\u2022 Kindly provide us with your feedback based on our recommendations.\n\u2022 Report any incidents detected relating to this advisory.\n\u2022 For inquiries and feedback, please contact DOH SOC at:\no Email: soc@example.invalid\no Phone: +000 0 0000000o Mobile: +000 0 0000000This circular is designed for regulatory procedures and should \u064a \u0645\u0644\u0627\u0639\u0644\u0625\u0627 \u0631\u0634\u0646\u0644\u0644 \u0649\u0648\u062a\u062d\u0645\u0643 \u0635\u0635\u062e\u0645 \u0631\u064a\u063a\u0648 \u0629\u064a\u0645\u064a\u0638\u0646\u062a\u0644\u0627 \u062a\u0627\u0621\u0627\u0631\u062c\u0644\u0625\u0644 \u0645\u064a\u0645\u0639\u062a\u0644\u0627 \u0627\u0630\u0647\nnot be used as content for media publication",
+  "pdf_ok": true,
+  "page_count": 4,
+  "tables": [
+   [
+    [
+     "Platform",
+     "Affected Versions",
+     "Fixed Versions"
+    ],
+    [
+     "Linux Kernel (FUSE\nSubsystem)",
+     "Vulnerable kernel versions\nutilizing the FUSE subsystem",
+     "Refer to your Linux\ndistribution vendors"
+    ]
+   ]
+  ]
+ },
+ "ioc_table": {
+  "ref": "DOH-2026585",
+  "subject": "[EXTERNAL] Security Advisory :: DOH- 2026585 - Memory-Resident OctLurk and SilkLurk Backdoors Deployed Against  Government Organizations",
+  "body": "CAUTION: External email. Do not click links or open attachments unless you recognize the sender and know the content is safe\r\n\r\nDear IS Stakeholder,\r\nThis advisory is about, Researchers uncovered two previously unidentified backdoors, OctLurk and SilkLurk, being used in a cyber-espionage campaign targeting organizations primarily across Central Asia since January 2025. The activity affected government entities and organizations in sectors including healthcare, research, foreign affairs, logistics, law enforcement, urban planning, facilities management, and education.\r\nVulnerability/Disclosure Detail:\r\n\r\n\r\nAffected Secter:\r\nGovernment  Entities\r\n \r\nReference:\r\nSecurelist\r\n \r\nDetected on:\r\n31-July-2026\r\n \r\nType:\r\nCampaign\r\n \r\nRisk level:\r\nHigh\r\n \r\nDescription:\r\nResearchers uncovered two previously unidentified backdoors, OctLurk and SilkLurk, being used in a cyber-espionage campaign targeting organizations primarily across Central Asia since January 2025. The activity affected government entities and organizations in sectors including healthcare, research, foreign affairs, logistics, law enforcement, urban planning, facilities management, and education.\r\n \r\n \r\nAction Required:\r\nApply the recommendations provided in the attached advisory.\r\n \r\n \r\n You are expected to provide two responses for the advisory:\r\n\r\n1. Acknowledgement: You are required to acknowledge this advisory notification. A response by email or a phone call to be considered as acknowledgement.\r\n2. Resolution: You must provide an update regarding the progress or resolution of the advisory. The update can be either a confirmation of the advisory having been resolved or a definite timeline when you will resolve it.\r\n\r\nPriority\r\nAcknowledgment\r\n(Hours after Advisory Notification)\r\nResolution\r\n(Hours after Reported)\r\nP1 - Critical\r\n8 Hours\r\n24 Hours\r\nP2 - High\r\n16 Hours\r\n48 Hours\r\nP3 - Medium\r\n72 Hours\r\n(3 Working Days)\r\n120 Hours\r\n(5 Working Days)\r\nP4 - Low\r\n72 Hours\r\n(3 Working Days)\r\n120 Hours\r\n(5 Working Days)\r\n[signature block removed]\n",
+  "pdf_text": "Classified as Restricted by Department of Health\n\u062a\u0627\u0645\u0648\u0644\u0639\u0645\u0644\u0627 \u0646\u0645\u0623 \u062a\u0627\u064a\u0644\u0645\u0639 \u0632\u0643\u0631\u0645\nSECURITY OPERATIONS CENTER\nADVISORY\nMemory-Resident OctLurk and SilkLurk Backdoors Deployed Against\nGovernment Organizations\nSeverity: High\n+000 0 0000000| soc@example.invalid\nAdvisory Number: DOH - 2026585 Published on: 04- Aug-2026\nOVERVIEW\nOn 30 July 2026, researchers uncovered two previously unidentified backdoors, OctLurk and SilkLurk,\nbeing used in a cyber-espionage campaign targeting organizations primarily across Central Asia since\nJanuary 2025. The activity affected government entities and organizations in sectors including\nhealthcare, research, foreign affairs, logistics, law enforcement, urban planning, facilities\nmanagement, and education. Researchers determined that both malware families are heavily\nobfuscated, customized for specific victims, and capable of loading additional modules to conduct\ncommand execution, file operations, credential theft, network scanning, keylogging, email collection,\nand remote access activities. The investigation also identified the deployment of a supporting utility\nknown as LurkProxy, with evidence suggesting a common threat actor operates both malware families.\nTECHNICAL DETAILS\nConsidering the strategic importance of government institutions, public-sector organizations, and\ncritical services within the UAE, the techniques demonstrated in this campaign highlight the threat\nposed by highly tailored espionage malware designed for long-term covert access. The use of victim-\nspecific loaders, memory-resident malware, credential harvesting, remote administration capabilities,\nand extensive post-compromise tooling could affect organizations handling sensitive government,\ndiplomatic, operational, or research-related information. The Cyber Threat Intelligence Team strongly\nadvises organizations to adhere to the recommendations and indicators outlined in this advisory to\neffectively mitigate the risks posed by this threat.\nThe campaign centers on the deployment of the OctLurk and SilkLurk backdoors, which researchers\nobserved targeting organizations across Central Asia. Both malware families utilize customized loaders\nthat rely on system-specific information from victim machines to decrypt malicious payloads, making\nthem difficult to analyse and detect. The backdoors are heavily obfuscated and primarily operate in\nmemory. Researchers noted that the same threat actor likely operates both malware families, with\nsome victims hosting both implants simultaneously. In addition to maintaining remote access, the\nmalware supports modular functionality through additional plugins capable of command shell access,\nAdvisory Number: DOH - 2026585 Published on: 04- Aug-2026\nfile management, user interaction simulation, credential theft, keylogging, browser password\nextraction, email collection, network reconnaissance, and remote administration.\nATTACK CHAIN OVERVIEW:\nThe attack chain involved the use of administrative credentials to remotely create scheduled tasks and\nmalicious services that executed loader components. The loaders decrypted and decompressed\nembedded payloads using a multi-stage process involving hard-coded keys and victim-specific system\ninformation before reflectively injecting the backdoor directly into memory. Once loaded, the backdoor\ncollected host information including operating system details, computer and user information, network-\nrelated information, and system time data. The collected information was compressed, encrypted\nthrough multiple stages, and transmitted to the attackers. Commands and plugins received from\ncommand-and-control infrastructure were decrypted, decompressed, and executed in memory,\nallowing the threat actors to expand capabilities without relying on traditional on-disk payloads.\nFurther analysis showed that OctLurk supports a broad range of espionage-focused capabilities through\nplugins. The file management component can enumerate drives, search for files, recursively collect file\nmetadata, create and modify files and directories, perform file transfers, and manipulate timestamps.\nThe command shell plugin enables interactive command execution and collection of command output.\nThe interaction management component supports screen capture, clipboard access, keyboard and\nmouse simulation, and other user interaction functions. Researchers also reported that post-\ncompromise tooling associated with the campaign included credential dumping, browser password\ntheft, keylogging, network scanning, email harvesting, remote access utilities, and additional malware\ndeployment. The use of customized victim-specific loaders, reflective loading, layered encryption,\ncompression, and memory-resident execution demonstrates a strong emphasis on stealth and\noperational security.\nThe research concludes that OctLurk and SilkLurk represent a focused espionage toolset designed for\nstealth, persistence, and post-compromise collection in sensitive environments. Organizations should\nprioritize detection of abnormal administrative activity, service-based execution, in-memory payload\nbehavior, credential access attempts, and unusual plugin-driven post-exploitation activity.\nAdvisory Number: DOH - 2026585 Published on: 04- Aug-2026\nIOCs\nIndicator Type\n192[.]0[.]2[.]1 IP Address\n192[.]0[.]2[.]1 IP Address\n192[.]0[.]2[.]1 IP Address\n192[.]0[.]2[.]1 IP Address\n192[.]0[.]2[.]1 IP Address\n192[.]0[.]2[.]1 IP Address\n192[.]0[.]2[.]1 IP Address\n192[.]0[.]2[.]1 IP Address\n192[.]0[.]2[.]1 IP Address\n192[.]0[.]2[.]1 IP Address\nmalicious[.]example[.]invalid Domain\nmalicious[.]example[.]invalid Domain\nmalicious[.]example[.]invalid Domain\nmalicious[.]example[.]invalid Domain\nmalicious[.]example[.]invalid Domain\nmalicious[.]example[.]invalid Domain\nmalicious[.]example[.]invalid Domain\nmalicious[.]example[.]invalid Domain\nmalicious[.]example[.]invalid Domain\nmalicious[.]example[.]invalid Domain\nmalicious[.]example[.]invalid Domain\nmalicious[.]example[.]invalid Domain\nmalicious[.]example[.]invalid Domain\nmalicious[.]example[.]invalid Domain\nmalicious[.]example[.]invalid Domain\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb MD5\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb MD5\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb MD5\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb MD5\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb MD5\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb MD5\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb MD5\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb MD5\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb MD5\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb MD5\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb MD5\nAdvisory Number: DOH - 2026585 Published on: 04- Aug-2026\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa SHA256\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa SHA256\nRECOMMENDATIONS\n\u2022 Monitor for unusual remote administrative activity, especially creation of scheduled tasks or\nservices on endpoints and servers.\n\u2022 Hunt for in-memory payload execution, reflective loading behavior, and suspicious\nprocesses without clear on disk origin.\n\u2022 Review privileged account usage and investigate administrative logons followed by service\ncreation, remote execution, or discovery activity.\n\u2022 Detect and alert on credential dumping, keylogging behavior, browser credential access, and\nabnormal email collection activity.\n\u2022 Restrict lateral movement by enforcing least privilege, segmenting sensitive systems, and\nlimiting administrative access between network zones.\nREFERENCES\n\u2022 https://securelist.com/octlurk-silklurk-backdoors-central-asia/120840/\nPLEASE NOTE\n\u2022 Ensure all changes to the organization\u2019s environment shall be conducted in a controlled\nmanner and aligned with the established Change Management process.\n\u2022 Please test all patches and IOC in an UAT environment before deploying to production to avoid\nany service disruptions.\nAdvisory Number: DOH - 2026585 Published on: 04- Aug-2026\nACTION\n\u2022 Kindly provide us with your feedback based on our recommendations.\n\u2022 Report any incidents detected relating to this advisory.\n\u2022 For inquiries and feedback, please contact DOH SOC at:\no Email: soc@example.invalid\no Phone: +000 0 0000000o Mobile: +000 0 0000000This circular is designed for regulatory procedures and \u064a \u0645\u0644\u0627\u0639\u0644\u0625\u0627 \u0631\u0634\u0646\u0644\u0644 \u0649\u0648\u062a\u062d\u0645\u0643 \u0635\u0635\u062e\u0645 \u0631\u064a\u063a\u0648 \u0629\u064a\u0645\u064a\u0638\u0646\u062a\u0644\u0627 \u062a\u0627\u0621\u0627\u0631\u062c\u0644\u0625\u0644 \u0645\u064a\u0645\u0639\u062a\u0644\u0627 \u0627\u0630\u0647\nshould not be used as content for media publication",
+  "pdf_ok": true,
+  "page_count": 6,
+  "tables": [
+   [
+    [
+     "",
+     "Indicator",
+     "",
+     "",
+     "Type",
+     ""
+    ],
+    [
+     "192[.]0[.]2[.]1",
+     null,
+     null,
+     "IP Address",
+     null,
+     null
+    ],
+    [
+     "192[.]0[.]2[.]1",
+     null,
+     null,
+     "IP Address",
+     null,
+     null
+    ],
+    [
+     "192[.]0[.]2[.]1",
+     null,
+     null,
+     "IP Address",
+     null,
+     null
+    ],
+    [
+     "192[.]0[.]2[.]1",
+     null,
+     null,
+     "IP Address",
+     null,
+     null
+    ],
+    [
+     "192[.]0[.]2[.]1",
+     null,
+     null,
+     "IP Address",
+     null,
+     null
+    ],
+    [
+     "192[.]0[.]2[.]1",
+     null,
+     null,
+     "IP Address",
+     null,
+     null
+    ],
+    [
+     "192[.]0[.]2[.]1",
+     null,
+     null,
+     "IP Address",
+     null,
+     null
+    ],
+    [
+     "192[.]0[.]2[.]1",
+     null,
+     null,
+     "IP Address",
+     null,
+     null
+    ],
+    [
+     "192[.]0[.]2[.]1",
+     null,
+     null,
+     "IP Address",
+     null,
+     null
+    ],
+    [
+     "192[.]0[.]2[.]1",
+     null,
+     null,
+     "IP Address",
+     null,
+     null
+    ],
+    [
+     "malicious[.]example[.]invalid",
+     null,
+     null,
+     "Domain",
+     null,
+     null
+    ],
+    [
+     "malicious[.]example[.]invalid",
+     null,
+     null,
+     "Domain",
+     null,
+     null
+    ],
+    [
+     "malicious[.]example[.]invalid",
+     null,
+     null,
+     "Domain",
+     null,
+     null
+    ],
+    [
+     "malicious[.]example[.]invalid",
+     null,
+     null,
+     "Domain",
+     null,
+     null
+    ],
+    [
+     "malicious[.]example[.]invalid",
+     null,
+     null,
+     "Domain",
+     null,
+     null
+    ],
+    [
+     "malicious[.]example[.]invalid",
+     null,
+     null,
+     "Domain",
+     null,
+     null
+    ],
+    [
+     "malicious[.]example[.]invalid",
+     null,
+     null,
+     "Domain",
+     null,
+     null
+    ],
+    [
+     "malicious[.]example[.]invalid",
+     null,
+     null,
+     "Domain",
+     null,
+     null
+    ],
+    [
+     "malicious[.]example[.]invalid",
+     null,
+     null,
+     "Domain",
+     null,
+     null
+    ],
+    [
+     "malicious[.]example[.]invalid",
+     null,
+     null,
+     "Domain",
+     null,
+     null
+    ],
+    [
+     "malicious[.]example[.]invalid",
+     null,
+     null,
+     "Domain",
+     null,
+     null
+    ],
+    [
+     "malicious[.]example[.]invalid",
+     null,
+     null,
+     "Domain",
+     null,
+     null
+    ],
+    [
+     "malicious[.]example[.]invalid",
+     null,
+     null,
+     "Domain",
+     null,
+     null
+    ],
+    [
+     "malicious[.]example[.]invalid",
+     null,
+     null,
+     "Domain",
+     null,
+     null
+    ],
+    [
+     "malicious[.]example[.]invalid",
+     null,
+     null,
+     "Domain",
+     null,
+     null
+    ],
+    [
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     null,
+     null,
+     "MD5",
+     null,
+     null
+    ],
+    [
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     null,
+     null,
+     "MD5",
+     null,
+     null
+    ],
+    [
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     null,
+     null,
+     "MD5",
+     null,
+     null
+    ],
+    [
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     null,
+     null,
+     "MD5",
+     null,
+     null
+    ],
+    [
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     null,
+     null,
+     "MD5",
+     null,
+     null
+    ],
+    [
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     null,
+     null,
+     "MD5",
+     null,
+     null
+    ],
+    [
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     null,
+     null,
+     "MD5",
+     null,
+     null
+    ],
+    [
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     null,
+     null,
+     "MD5",
+     null,
+     null
+    ],
+    [
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     null,
+     null,
+     "MD5",
+     null,
+     null
+    ],
+    [
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     null,
+     null,
+     "MD5",
+     null,
+     null
+    ],
+    [
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     null,
+     null,
+     "MD5",
+     null,
+     null
+    ]
+   ]
+  ]
+ },
+ "ref_mismatch": {
+  "ref": "DOH-2026515",
+  "subject": "[EXTERNAL] Security Advisory :: DOH-2026515 - Microsoft SharePoint RCE Vulnerability Claim (CVE-2026-33112)",
+  "body": "CAUTION: External email. Do not click links or open attachments unless you recognize the sender and know the content is safe\r\n\r\nDear IS Stakeholder,\r\n\r\nKindly pay attention to the following advisory addresses an unverified claim regarding a Remote Code Execution (RCE) vulnerability affecting Microsoft SharePoint Server, tracked as CVE-2026-33112.\r\n\r\nCVE-2026-33112 is a remote code execution (RCE) vulnerability affecting on-premises Microsoft SharePoint Server, rooted in insecure deserialization (CWE-502) of untrusted .NET DataSet objects. The flaw was addressed by Microsoft as part of the May 2026 Patch Tuesday release. A public proof-of-concept (PoC) was disclosed on July 7, 2026 by Viettel Security, demonstrating a working bypass of the XmlValidator safe-control mechanism that Microsoft had introduced to remediate the earlier CVE-2025-53770 SharePoint ToolShell chain. The bypass allows any low-privilege, authenticated SharePoint site member to achieve arbitrary code execution in the context of the SharePoint application pool (w3wp.exe), with no user interaction required. Please refer to the attached advisory for more details.\r\n\r\n \r\n\r\nVulnerability/Disclosure Detail:\r\n\r\nAffected Product:\r\n\r\nMicrosoft SharePoint \r\n\r\n \r\n\r\nReference:\r\n\r\ncyberpress\r\n\r\n \r\n\r\nDetected on:\r\n\r\n11-July-2026\r\n\r\n \r\n\r\nType:\r\n\r\nVulnerability\r\n\r\n \r\n\r\nRisk level:\r\n\r\nCritical\r\n\r\n \r\n\r\nDescription:\r\n\r\nThis advisory addresses an unverified claim regarding a Remote Code Execution (RCE) vulnerability affecting Microsoft SharePoint Server, tracked as CVE-2026-33112.\r\n\r\nCVE-2026-33112 is a remote code execution (RCE) vulnerability affecting on-premises Microsoft SharePoint Server, rooted in insecure deserialization (CWE-502) of untrusted .NET DataSet objects. The flaw was addressed by Microsoft as part of the May 2026 Patch Tuesday release. A public proof-of-concept (PoC) was disclosed on July 7, 2026 by Viettel Security, demonstrating a working bypass of the XmlValidator safe-control mechanism that Microsoft had introduced to remediate the earlier CVE-2025-53770 SharePoint ToolShell chain. The bypass allows any low-privilege, authenticated SharePoint site member to achieve arbitrary code execution in the context of the SharePoint application pool (w3wp.exe), with no user interaction required.\r\n \r\n\r\nAction Required:\r\n\r\nApply the recommendations provided in the attached advisory.\r\n\r\n \r\n\r\n \r\n\r\n \r\n\r\nYou are expected to provide two responses for the advisory:\r\n1. Acknowledgement: You are required to acknowledge this advisory notification. A response by email or a phone call to be considered as acknowledgement.\r\n2. Resolution: You must provide an update regarding the progress or resolution of the advisory. The update can be either a confirmation of the advisory having been resolved or a definite timeline when you will resolve it.\r\n\r\n\r\n\r\n\r\n\r\nPriority\r\n\r\nAcknowledgment\r\n(Hours after Advisory Notification)\r\n\r\nResolution\r\n(Hours after Reported)\r\n\r\nP1 - Critical\r\n\r\n8 Hours\r\n\r\n24 Hours\r\n\r\nP2 - High\r\n\r\n16 Hours\r\n\r\n48 Hours\r\n\r\nP3 - Medium\r\n\r\n72 Hours\r\n\r\n(3 Working Days)\r\n\r\n120 Hours\r\n\r\n(5 Working Days)\r\n\r\nP4 - Low\r\n\r\n72 Hours\r\n\r\n(3 Working Days)\r\n\r\n120 Hours\r\n\r\n(5 Working Days)\r\n[signature block removed]\n",
+  "pdf_text": "Classified as Restricted by Department of Health\n`\n\u062a\u0627\u0645\u0648\u0644\u0639\u0645\u0644\u0627 \u0646\u0645\u0623 \u062a\u0627\u064a\u0644\u0645\u0639 \u0632\u0643\u0631\u0645\nSECURITY OPERATIONS CENTER\nADVISORY\nMicrosoft SharePoint RCE Vulnerability Claim (CVE-2026-33112)\nSeverity: Critical\n+000 0 0000000| soc@example.invalid\nAdvisory Number: DOH-2026516 Published on: 11-July-2026\nOVERVIEW\nThis advisory addresses an unverified claim regarding a Remote Code Execution (RCE) vulnerability\naffecting Microsoft SharePoint Server, tracked as CVE-2026-33112.\nTECHNICAL DETAILS\nCVE-2026-33112 is a remote code execution (RCE) vulnerability affecting on-premises Microsoft\nSharePoint Server, rooted in insecure deserialization (CWE-502) of untrusted .NET DataSet objects. The\nflaw was addressed by Microsoft as part of the May 2026 Patch Tuesday release. A public proof-of-\nconcept (PoC) was disclosed on July 7, 2026 by Viettel Security, demonstrating a working bypass of the\nXmlValidator safe-control mechanism that Microsoft had introduced to remediate the earlier CVE-2025-\n53770 SharePoint ToolShell chain. The bypass allows any low-privilege, authenticated SharePoint site\nmember to achieve arbitrary code execution in the context of the SharePoint application pool\n(w3wp.exe), with no user interaction required.\nCVE ID: CVE-2026-33112\nOccurred: Disclosed/patched by Microsoft on May 12, 2026; public RCE PoC released July 7, 2026\nSeverity: High / Critical\nCVSS Score: 8.8 (CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H)\nCategory: Deserialization of Untrusted Data (CWE-502) leading to Remote Code Execution\nDescription:\nSharePoint Server's PerformancePoint Services component builds an XSD schema set when processing\nDataSet objects submitted to the BIMonitoringAuthoringService web service. The vulnerable code path\nresolves external schema references declared via <xsd:import> and <xsd:include> elements over the\nnetwork rather than validating them locally. Because the referenced schema is fetched from an attacker-\ncontrolled host at request time, the XmlValidator safe-control introduced by Microsoft's second CVE-\n202553770 fix (the TypeNameParserImpl generic-type check) never inspects the resulting type\ndefinitions, effectively blinding the validation logic. The PPSAuthoringService.asmx TestConnection\nmethod indirectly invokes ExcelDataSet.get_DataTable() during connection testing, triggering\nAdvisory Number: DOH-2026516 Published on: 11-July-2026\ndeserialization of the attacker-supplied gadget chain and resulting in code execution under the\nSharePoint application pool identity.\nATTACK VECTOR\nAttacker Profile: Authenticated attacker holding any low-privilege SharePoint account (e.g., standard site\nmember); no elevated privileges or user interaction required\nTarget Sector: Organizations running on-premises SharePoint Server (Subscription Edition, 2019, 2016\nEnterprise) government, education, and enterprise environments with internetfacing or internally\nexposed SharePoint farms\nPost-Exploitation Activity:\n\u2022 Attacker authenticates to the target SharePoint site with a valid low-privilege account and\ncreates a SharePoint list item to use as a deserialization anchor.\n\u2022 Attackers stand up an external HTTP server hosting a malicious XSD schema reachable from the\nSharePoint server.\n\u2022 A crafted request is submitted to /_vti_bin/PPS/PPSAuthoringService.asmx (TestConnection),\nreferencing the list item via the ItemUrl parameter and importing the attacker-hosted schema.\n\u2022 SharePoint resolves the external schema, bypassing XmlValidator, and deserializes the\nembedded gadget chain via ExcelDataSet.get_DataTable(), leading to arbitrary command\nexecution under w3wp.exe.\n\u2022 Observed proof-of-concept behavior includes spawning of child processes (e.g., calc.exe in\ntesting) confirming code execution; in live attacks these maps to cmd.exe, powershell.exe, or\nrundll32.exe as follow-on payload droppers.\nAdvisory Number: DOH-2026516 Published on: 11-July-2026\nAFFECTED PRODUCTS AND FIXES\nProduct Affected Impacted Component Fixed Version / Patch\nVersion Patch Available\nMicrosoft All builds prior PPSAuthoringService.asmx / May 12, 2026 Yes\nSharePoint to the May PerformancePoint Services Security\nServer 2026 (BIMonitoringAuthoringService) Update\nSubscription Cumulative DataSet deserialization path (Subscription\nEdition Update Edition CU)\nMicrosoft All builds prior PPSAuthoringService.asmx / KB for Yes\nSharePoint to the May PerformancePoint Services SharePoint\nServer 2019 2026 Security (BIMonitoringAuthoringService) Server 2019,\nUpdate DataSet deserialization path May 12, 2026\nrelease\nMicrosoft All builds prior PPSAuthoringService.asmx / KB for Yes\nSharePoint to the May PerformancePoint Services SharePoint\nServer 2016 2026 Security (BIMonitoringAuthoringService) Server 2016,\n(Enterprise) Update DataSet deserialization path May 12, 2026\nrelease\nEXPLOITATION STATUS\nAs of this advisory, Microsoft and NVD/EPSS scoring (as of May 17, 2026) had not flagged CVE-2026-\n33112 as known exploited in the wild. However, a fully weaponized public PoC - including exact\nreproduction steps, the vulnerable endpoint, and payload trigger method - was published by Viettel\nSecurity and covered widely on July 7, 2026. Given the low privilege bar, lack of required user interaction,\nand full public disclosure of the exploitation chain, the likelihood of in-the-wild exploitation should now\nbe treated as high. This CVE should be reprioritized as actively exploitable pending confirmation of\nexploitation telemetry.\nAdvisory Number: DOH-2026516 Published on: 11-July-2026\nRECOMMENDATIONS\n\u2022 Apply the May 2026 Microsoft Security Update for the applicable SharePoint edition (Subscription\nEdition, 2019, or 2016 Enterprise) immediately across all farm roles - web front-end, application, and\nsearch servers.\n\u2022 Inventory all SharePoint farms in the environment and confirm patch/build-number deployment\nagainst the Microsoft Update Catalog entry for CVE-2026-33112.\n\u2022 Restrict or monitor access to /_vti_bin/PPS/PPSAuthoringService.asmx; disable PerformancePoint\nServices where not actively used to eliminate the exposed attack surface.\n\u2022 Monitor and, where feasible, restrict outbound HTTP/HTTPS connections from SharePoint servers to\nunfamiliar external hosts, particularly around SOAP requests to PPSAuthoringService.asmx.\n\u2022 Hunt for anomalous TestConnection calls, unexpected child processes spawned by w3wp.exe\n(cmd.exe, powershell.exe, rundll32.exe), and .NET Runtime errors referencing BinaryFormatter,\nLosFormatter, or ObjectStateFormatter in Windows Event Logs and SharePoint ULS logs.\n\u2022 Deploy WAF/reverse-proxy signatures to detect serialized .NET payload patterns and known\nysoserial.net gadget chain signatures (e.g., TypeConfuseDelegate, ActivitySurrogateSelector) in\ninbound SharePoint requests.\n\u2022 Run SharePoint application pools under least-privilege service accounts to constrain blast radius if\nexploitation occurs, and rotate farm/service account credentials if compromise is suspected.\n\u2022 Enforce MFA on all SharePoint accounts to reduce risk from credential-based access to the\nauthenticated entry point this vulnerability requires.\nAdvisory Number: DOH-2026516 Published on: 11-July-2026\nREFERENCES\n\u2022 https://www.sentinelone.com/vulnerability-database/cve-2026-33112/\n\u2022 https://cyberpress.org/sharepoint-rce-vulnerablility/\n\u2022 https://viettelsecurity.com/microsoft-sharepoint-breach-linked-to-vulnerability-discovered-by-\nviettel-cyber-security-customer-alert-latest-research-and-recommendations/\n\u2022 https://threatprotect.qualys.com/2026/05/12/microsoft-patch-tuesday-may-2026-security-\nupdate-review/\nPLEASE NOTE\n\u2022 Ensure all changes to the organization\u2019s environment shall be conducted in a controlled manner and\naligned with the established Change Management process.\n\u2022 Please test all patches and IOC in an UAT environment before deploying to production to avoid any\nservice disruptions.\nACTION\n\u2022 Kindly provide us with your feedback based on our recommendations.\n\u2022 Report any incidents detected relating to this advisory.\n\u2022 For inquiries and feedback, please contact DOH SOC at:\no Email: soc@example.invalid\no Phone: +000 0 0000000This circular is designed for regulatory procedures and \u064a \u0645\u0644\u0627\u0639\u0644\u0625\u0627 \u0631\u0634\u0646\u0644\u0644 \u0649\u0648\u062a\u062d\u0645\u0643 \u0635\u0635\u062e\u0645 \u0631\u064a\u063a\u0648 \u0629\u064a\u0645\u064a\u0638\u0646\u062a\u0644\u0627 \u062a\u0627\u0621\u0627\u0631\u062c\u0644\u0625\u0644 \u0645\u064a\u0645\u0639\u062a\u0644\u0627 \u0627\u0630\u0647\nshould not be used as content for media publication",
+  "pdf_ok": true,
+  "page_count": 6,
+  "tables": [
+   [
+    [
+     "Product",
+     "Affected\nVersion",
+     "Impacted Component",
+     "Fixed Version /\nPatch",
+     "Patch\nAvailable"
+    ],
+    [
+     "Microsoft\nSharePoint\nServer\nSubscription\nEdition",
+     "All builds prior\nto the May\n2026\nCumulative\nUpdate",
+     "PPSAuthoringService.asmx /\nPerformancePoint Services\n(BIMonitoringAuthoringService)\nDataSet deserialization path",
+     "May 12, 2026\nSecurity\nUpdate\n(Subscription\nEdition CU)",
+     "Yes"
+    ],
+    [
+     "Microsoft\nSharePoint\nServer 2019",
+     "All builds prior\nto the May\n2026 Security\nUpdate",
+     "PPSAuthoringService.asmx /\nPerformancePoint Services\n(BIMonitoringAuthoringService)\nDataSet deserialization path",
+     "KB for\nSharePoint\nServer 2019,\nMay 12, 2026\nrelease",
+     "Yes"
+    ],
+    [
+     "Microsoft\nSharePoint\nServer 2016\n(Enterprise)",
+     "All builds prior\nto the May\n2026 Security\nUpdate",
+     "PPSAuthoringService.asmx /\nPerformancePoint Services\n(BIMonitoringAuthoringService)\nDataSet deserialization path",
+     "KB for\nSharePoint\nServer 2016,\nMay 12, 2026\nrelease",
+     "Yes"
+    ]
+   ]
+  ]
+ },
+ "many_cves": {
+  "ref": "DOH-2026593",
+  "subject": "[EXTERNAL] Security Advisory :: DOH-2026593 - Security Updates \u2013 Google Chrome",
+  "body": "CAUTION: External email. Do not click links or open attachments unless you recognize the sender and know the content is safe\r\n\r\nDear IS Stakeholder,\r\n\r\n\r\nKindly pay attention to the following advisory is related to  security updates for the Chrome browser addressing 370 security vulnerabilities, including multiple Critical- and High-severity vulnerabilities. The identified flaws affect several Chrome components and could potentially result in arbitrary code execution, information disclosure, security policy bypass, privilege escalation, or browser instability.\r\n\r\n \r\n\r\nVulnerability/Disclosure Detail:\r\n\r\n\r\n\r\n\r\n\r\nAffected Product:\r\n\r\nGoogle Chrome\r\n\r\n \r\n\r\nReference:\r\n\r\nChromereleases\r\n\r\n \r\n\r\nDetected on:\r\n\r\n30-July-2026\r\n\r\n \r\n\r\nType:\r\n\r\nVulnerability\r\n\r\n \r\n\r\nRisk level:\r\n\r\nCritical\r\n\r\n \r\n\r\nDescription:\r\n\r\nSecurity updates for the Chrome browser addressing 370 security vulnerabilities, including multiple Critical- and High-severity vulnerabilities. The identified flaws affect several Chrome components and could potentially result in arbitrary code execution, information disclosure, security policy bypass, privilege escalation, or browser instability.\r\n\r\n \r\n\r\n \r\n\r\nAction Required:\r\n\r\nApply the recommendations provided in the attached advisory.\r\n\r\n \r\n\r\n \r\n\r\n \r\n\r\nYou are expected to provide two responses for the advisory:\r\n\r\n\r\n1. Acknowledgement: You are required to acknowledge this advisory notification. A response by email or a phone call to be considered as acknowledgement.\r\n2. Resolution: You must provide an update regarding the progress or resolution of the advisory. The update can be either a confirmation of the advisory having been resolved or a definite timeline when you will resolve it.\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\nPriority\r\n\r\nAcknowledgment\r\n(Hours after Advisory Notification)\r\n\r\nResolution\r\n(Hours after Reported)\r\n\r\nP1 - Critical\r\n\r\n8 Hours\r\n\r\n24 Hours\r\n\r\nP2 - High\r\n\r\n16 Hours\r\n\r\n48 Hours\r\n\r\nP3 - Medium\r\n\r\n72 Hours\r\n\r\n(3 Working Days)\r\n\r\n120 Hours\r\n\r\n(5 Working Days)\r\n\r\nP4 - Low\r\n\r\n72 Hours\r\n\r\n(3 Working Days)\r\n\r\n120 Hours\r\n\r\n(5 Working Days)\r\n\r\n \r\n\r\n \r\n\r\n \r\n\r\n \r\n\r\n \r\n\r\n \r\n\r\n \r\n\r\n \r\n\r\n \r\n\r\n \r\n\r\n\r\n\r\n\r\n\r\n Regards,\r\n\r\n\r\n <http://portal.haad.ae/PublishingImages/LocationMapScreenshot.png> \r\n[signature block removed]\n",
+  "pdf_text": "Classified as Restricted by Department of Health\n\u062a\u0627\u0645\u0648\u0644\u0639\u0645\u0644\u0627 \u0646\u0645\u0623 \u062a\u0627\u064a\u0644\u0645\u0639 \u0632\u0643\u0631\u0645\nSECURITY OPERATIONS CENTER\nADVISORY\nSecurity Updates \u2013 Google Chrome\nSeverity: Critical\n+000 0 0000000| soc@example.invalid\nAdvisory Number: DOH- 2026593 Published on: 01-August-2026\nOVERVIEW\nGoogle has released security updates for the Chrome browser addressing 370 security vulnerabilities,\nincluding multiple Critical- and High-severity vulnerabilities. The identified flaws affect several Chrome\ncomponents and could potentially result in arbitrary code execution, information disclosure, security\npolicy bypass, privilege escalation, or browser instability.\nTECHNICAL DETAILS\nVULNERABILITY DETAILS:\nCritical\n\u2022 CVE-2026-17650 | Use after free in Compositing\n\u2022 CVE-2026-17651 | Insufficient validation of untrusted input in Dawn\n\u2022 CVE-2026-17652 | Use after free in Views\n\u2022 CVE-2026-17653 | Use after free in Skia\n\u2022 CVE-2026-17654 | Race in Updater\n\u2022 CVE-2026-17655 | Insufficient validation of untrusted input in ANGLE\n\u2022 CVE-2026-17656 | Use after free in Ozone\nHigh\n\u2022 Use after free: CVE-2026-17657 (Navigation), CVE-2026-17658 & CVE-2026-17665 (V8), CVE 2026-\n17661 (Loader), CVE-2026-17670 & CVE-2026-17699 (Views), CVE-2026 17685 (Autofill), CVE-2026-\n17688 & CVE-2026-17719 (Input), CVE-2026-17692 (DataTransfer), CVE-2026-17694 (DOM), CVE-\n2026-17704 & CVE-2026-17718 (ANGLE), CVE-2026-17708 (Audio), CVE-2026-17716 (Updater),\nCVE-2026-17723 (Media)\n\u2022 Insufficient validation of untrusted input: CVE-2026-17660 (Network), CVE-2026-17663 (GPU), CVE-\n2026-17664 (Loader), CVE-2026-17671 (ANGLE), CVE-2026-17672 (Chromecast), CVE-2026-17679\n(Print Preview), CVE-2026-17681 (Web Authentication), CVE-2026-17684 (Chrome for iOS), CVE-\n2026-17686 (Passwords), CVE-2026-17690 (PDF), CVE-2026-17698 (UI), CVE-2026-17700 (Actor),\nCVE-2026-17706 (Media), CVE-2026-17713 (Accessibility)\nAdvisory Number: DOH- 2026593 Published on: 01-August-2026\n\u2022 Inappropriate implementation: CVE-2026-17659 (SiteIsolation), CVE-2026-17669 (Chrome for iOS),\nCVE-2026 17674 (HTML), CVE-2026-17676, CVE-2026-17677, CVE-2026-17683 & CVE-2026 17695\n(ANGLE), CVE-2026-17693 (FileSystem), CVE-2026-17702 (Skia), CVE-2026 17710 (MHTML), CVE-\n2026-17715 (Passwords)\n\u2022 Uninitialized Use: CVE-2026-17667, CVE-2026-17668, CVE-2026-17689 & CVE-2026-17714 (ANGLE);\nCVE-2026-17707 (Media)\n\u2022 Integer overflow: CVE-2026-17673 (QUIC), CVE-2026-17682 & CVE-2026-17717 (ANGLE), CVE-2026\n17705 (libxml), CVE-2026-17726 (WebGL)\n\u2022 Out of bounds write: CVE-2026-17675, CVE-2026-17691 & CVE-2026-17721 (ANGLE); CVE-2026-\n17727 (WebGL)\n\u2022 Out of bounds read: CVE-2026-17678 & CVE-2026-17701 (ANGLE)\n\u2022 Type Confusion: CVE-2026-17687 & CVE-2026-17697 (ANGLE); CVE-2026-17725 (V8)\n\u2022 Race: CVE-2026-17709 & CVE-2026-17711 (Downloads), CVE-2026-17712 (Skia), CVE 2026-17724\n(Chrome for iOS)\n\u2022 Other: CVE-2026-17662 (Insufficient policy enforcement in Prefetch), CVE-2026-17666\n(Cryptographic Flaw in Enterprise), CVE-2026-17680 (Heap buffer overflow in Color), CVE-2026-\n17696 (Side-channel information leakage in Media), CVE-2026 17703 (Policy bypass in Chrome for\niOS), CVE-2026-17720 (Insufficient policy enforcement in Passwords), CVE-2026-17722 (Object\nlifecycle issue in WebView)\nFixed Versions:\n\u2022 Stable Channel Update for Desktop - Chrome 151.0.7922.71/.72 for Windows and Mac and\n151.0.7922.71 for Linux\n\u2022 Chrome 151 (151.0.7922.71) for Android\nRECOMMENDATIONS\n\u2022 Immediately upgrade update Google Chrome to the latest version\nAdvisory Number: DOH- 2026593 Published on: 01-August-2026\nREFERENCES\n\u2022 https://chromereleases.googleblog.com/\nPLEASE NOTE\n\u2022 Ensure all changes to the organization\u2019s environment shall be conducted in a controlled manner and\naligned with the established Change Management process.\n\u2022 Please test all patches and IOC in an UAT environment before deploying to production to avoid any\nservice disruptions.\nACTION\n\u2022 Kindly provide us with your feedback base on our recommendations.\n\u2022 Report any incidents detected relating to this advisory.\n\u2022 For inquiries and feedback, please contact DOH SOC at:\no Email: soc@example.invalid\no Phone: +000 0 0000000o Mobile: +000 0 0000000This circular is designed for regulatory procedures and \u064a \u0645\u0644\u0627\u0639\u0644\u0625\u0627 \u0631\u0634\u0646\u0644\u0644 \u0649\u0648\u062a\u062d\u0645\u0643 \u0635\u0635\u062e\u0645 \u0631\u064a\u063a\u0648 \u0629\u064a\u0645\u064a\u0638\u0646\u062a\u0644\u0627 \u062a\u0627\u0621\u0627\u0631\u062c\u0644\u0625\u0644 \u0645\u064a\u0645\u0639\u062a\u0644\u0627 \u0627\u0630\u0647\nshould not be used as content for media publication",
+  "pdf_ok": true,
+  "page_count": 4,
+  "tables": []
+ },
+ "no_subject_separator": {
+  "ref": "DOH-2026607",
+  "subject": "[EXTERNAL] Security Advisory :: DOH-2026607 Multiple Vulnerabilities in IBM WebSphere Application",
+  "body": "CAUTION: External email. Do not click links or open attachments unless you recognize the sender and know the content is safe\r\n\r\nDear IS Stakeholder,\r\n\r\nKindly pay attention to the following advisory Security Multiple vulnerabilities in IBM WebSphere Application Server that could allow unauthenticated attackers to execute arbitrary code, gain elevated privileges, access sensitive information, or perform server-side request forgery (SSRF) attacks.\r\n\r\n \r\n\r\n \r\n\r\nAffected Product:\r\n\r\nIBM WebSphere Application\r\n\r\n \r\n\r\nReference:\r\n\r\nIBM\r\n\r\n \r\n\r\nDetected on:\r\n\r\n9-Aug-2026\r\n\r\n \r\n\r\nType:\r\n\r\nVulnerability\r\n\r\n \r\n\r\nRisk level:\r\n\r\nCritical\r\n\r\n \r\n\r\nDescription:\r\n\r\nMultiple vulnerabilities in IBM WebSphere Application Server that could allow unauthenticated attackers to execute arbitrary code, gain elevated privileges, access sensitive information, or perform server-side request forgery (SSRF) attacks.\r\n\r\n \r\n\r\n \r\n\r\nAction Required:\r\n\r\nApply the recommendations provided in the attached advisory.\r\n\r\n \r\n\r\n \r\n\r\n \r\n\r\nYou are expected to provide two responses for the advisory:\r\n\r\n\r\n1. Acknowledgement: You are required to acknowledge this advisory notification. A response by email or a phone call to be considered as acknowledgement.\r\n2. Resolution: You must provide an update regarding the progress or resolution of the advisory. The update can be either a confirmation of the advisory having been resolved or a definite timeline when you will resolve it.\r\n\r\n \r\n\r\nPriority\r\n\r\nAcknowledgment\r\n(Hours after Advisory Notification)\r\n\r\nResolution\r\n(Hours after Reported)\r\n\r\nP1 - Critical\r\n\r\n8 Hours\r\n\r\n24 Hours\r\n\r\nP2 - High\r\n\r\n16 Hours\r\n\r\n48 Hours\r\n\r\nP3 - Medium\r\n\r\n72 Hours\r\n\r\n(3 Working Days)\r\n\r\n120 Hours\r\n\r\n(5 Working Days)\r\n\r\nP4 - Low\r\n\r\n72 Hours\r\n\r\n(3 Working Days)\r\n\r\n120 Hours\r\n\r\n(5 Working Days)\r\n[signature block removed]\n",
+  "pdf_text": "Classified as Restricted by Department of Health\n\u062a\u0627\u0645\u0648\u0644\u0639\u0645\u0644\u0627 \u0646\u0645\u0623 \u062a\u0627\u064a\u0644\u0645\u0639 \u0632\u0643\u0631\u0645\nSECURITY OPERATIONS CENTER\nADVISORY\nMultiple Vulnerabilities in IBM WebSphere Application\nSeverity: Critical\n+000 0 0000000| soc@example.invalid\nAdvisory Number: DOH- 2026607 Published on: 9-Aug-2026\nOVERVIEW\nMultiple vulnerabilities in IBM WebSphere Application Server that could allow unauthenticated\nattackers to execute arbitrary code, gain elevated privileges, access sensitive information, or perform\nserver-side request forgery (SSRF) attacks.\nTECHNICAL DETAILS\nVulnerability Details\n\u2022 CVE-2026-14512 Severity: Critical | CVSS: 9.8 An unsafe deserialization vulnerability that could\nallow a remote, unauthenticated attacker to bypass authentication or execute arbitrary code.\n\u2022 CVE-2026-14446 Severity: Critical | CVSS: 9.8 An improper authentication vulnerability in the\nadministrative console that could allow an attacker to gain elevated privileges.\n\u2022 CVE-2026-14529 Severity: High | CVSS: 9.4 A server-side request forgery (SSRF) vulnerability\naffecting environments where the SIP container feature is enabled. Successful exploitation\ncould allow an unauthenticated attacker to send crafted requests to internal systems.\n\u2022 CVE-2026-14528 Severity: High | CVSS: 7.4 A sensitive information exposure vulnerability that\ncould allow confidential information to be disclosed through log files.\nAffected Products and Versions\n\u2022 IBM WebSphere Application Server 9.0\n\u2022 IBM WebSphere Application Server 8.5\n\u2022 IBM WebSphere Application Server Liberty \u2014 Versions 192.0.2.1 through 192.0.2.1\nFixed Versions\nApply the relevant IBM interim fixes or update to the applicable fixed versions when available.\nAdvisory Number: DOH- 2026607 Published on: 9-Aug-2026\nRECOMMENDATIONS\n\u2022 Updating the affected versions to the fixed or latest versions released by IBM.\nREFERENCES\n:\n\u2022 https://www.ibm.com/support/pages/node/7281649\n\u2022 https://www.ibm.com/support/pages/node/7281721\n\u2022 https://www.ibm.com/support/pages/node/7281631\nPLEASE NOTE\n\u2022 Ensure all changes to the organization\u2019s environment shall be conducted in a controlled manner and\naligned with the established Change Management process.\n\u2022 Please test all patches and IOC in an UAT environment before deploying to production to avoid any\nservice disruptions.\nACTION\n\u2022 Kindly provide us with your feedback base on our recommendations.\n\u2022 Report any incidents detected relating to this advisory.\n\u2022 For inquiries and feedback, please contact DOH SOC at:\no Email: soc@example.invalid\no Phone: +000 0 0000000o Mobile: +000 0 0000000This circular is designed for regulatory procedures and \u064a \u0645\u0644\u0627\u0639\u0644\u0625\u0627 \u0631\u0634\u0646\u0644\u0644 \u0649\u0648\u062a\u062d\u0645\u0643 \u0635\u0635\u062e\u0645 \u0631\u064a\u063a\u0648 \u0629\u064a\u0645\u064a\u0638\u0646\u062a\u0644\u0627 \u062a\u0627\u0621\u0627\u0631\u062c\u0644\u0625\u0644 \u0645\u064a\u0645\u0639\u062a\u0644\u0627 \u0627\u0630\u0647\nshould not be used as content for media publication",
+  "pdf_ok": true,
+  "page_count": 3,
+  "tables": []
+ },
+ "threat_no_ioc": {
+  "ref": "DOH-2026638",
+  "subject": "[EXTERNAL] Security Advisory :: DOH-2026638 - Dysphoria Expands IoT Botnet into Large-Scale DDoS and Residential Relay Network",
+  "body": "CAUTION: External email. Do not click links or open attachments unless you recognize the sender and know the content is safe\r\n\r\nDear IS Stakeholder,\r\nKindly pay attention to the following advisory Security Dysphoria is a rapidly expanding IoT botnet targeting internet-exposed routers, gateways, IP cameras, DVRs, and other embedded Linux devices. The botnet has reportedly reached approximately 296,000 compromised devices and has evolved beyond DDoS attacks to include residential relay/proxy capabilities. Dysphoria also uses Ethereum Name Service (ENS) and Solana Name Service (SNS) records for resilient command-and-control (C2) infrastructure.\r\n \r\nAffected Product:\r\nInternet-exposed routers\r\nReference:\r\ncyberpress\r\nDetected on:\r\n17-Aug-2026\r\nType:\r\nVulnerability\r\nRisk level:\r\nHigh\r\nDescription:\r\nDysphoria is a rapidly expanding IoT botnet targeting internet-exposed routers, gateways, IP cameras, DVRs, and other embedded Linux devices. The botnet has reportedly reached approximately 296,000 compromised devices and has evolved beyond DDoS attacks to include residential relay/proxy capabilities. Dysphoria also uses Ethereum Name Service (ENS) and Solana Name Service (SNS) records for resilient command-and-control (C2) infrastructure.\r\nAction Required:\r\nApply the recommendations provided in the attached advisory.\r\n \r\n \r\nYou are expected to provide two responses for the advisory:\r\n\r\n1. Acknowledgement: You are required to acknowledge this advisory notification. A response by email or a phone call to be considered as acknowledgement.\r\n2. Resolution: You must provide an update regarding the progress or resolution of the advisory. The update can be either a confirmation of the advisory having been resolved or a definite timeline when you will resolve it.\r\n \r\nPriority\r\nAcknowledgment\r\n(Hours after Advisory Notification)\r\nResolution\r\n(Hours after Reported)\r\nP1 - Critical\r\n8 Hours\r\n24 Hours\r\nP2 - High\r\n16 Hours\r\n48 Hours\r\nP3 - Medium\r\n72 Hours\r\n(3 Working Days)\r\n120 Hours\r\n(5 Working Days)\r\nP4 - Low\r\n72 Hours\r\n(3 Working Days)\r\n120 Hours\r\n(5 Working Days)\r\n[signature block removed]\n",
+  "pdf_text": "Classified as Restricted by Department of Health\n\u062a\u0627\u0645\u0648\u0644\u0639\u0645\u0644\u0627 \u0646\u0645\u0623 \u062a\u0627\u064a\u0644\u0645\u0639 \u0632\u0643\u0631\u0645\nSECURITY OPERATIONS CENTER\nADVISORY\nDysphoria Expands IoT Botnet into Large-Scale DDoS and Residential\nRelay Network\nSeverity: High\n+000 0 0000000| soc@example.invalid\nAdvisory Number: DOH- 2026638 Published on: 17-Aug-2026\nOVERVIEW\nDysphoria is a rapidly expanding IoT botnet targeting internet-exposed routers, gateways, IP cameras,\nDVRs, and other embedded Linux devices. The botnet has reportedly reached approximately 296,000\ncompromised devices and has evolved beyond DDoS attacks to include residential relay/proxy\ncapabilities. Dysphoria also uses Ethereum Name Service (ENS) and Solana Name Service (SNS) records\nfor resilient command-and-control (C2) infrastructure.\nTECHNICAL DETAILS\nDysphoria is associated with the jackskid/fbot malware lineage and has undergone rapid development\nsince early 2026. Its primary targets include internet-facing embedded devices with exposed\nmanagement services, outdated firmware, weak credentials, and insecure configurations.\nThe malware supports multiple operational roles, including:\n\u2022 Large-scale DDoS activity using compromised IoT devices.\n\u2022 Relay/proxy functionality that allows attacker traffic to traverse compromised residential and\nsmall-business networks.\n\u2022 Blockchain-based infrastructure discovery through ENS and SNS records.\n\u2022 Router configuration manipulation, including the use of port-mapping functionality to enable\ninbound connectivity.\nC2 Domains\ndysphoria-c2.eth\ndysphoria-net.eth\ndysphoria-bot.sol\ndysphoria-control.sol\niot-dysphoria.eth\nSHA-256\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nAdvisory Number: DOH- 2026638 Published on: 17-Aug-2026\nTechnical Impact:\n\u2022 DDoS: Compromised devices can be used to generate large-scale distributed denial-of-service\ntraffic.\n\u2022 Residential Proxy Abuse: Infected routers and gateways can become intermediary nodes,\ncausing malicious activity to appear to originate from legitimate residential or business IP\naddresses.\n\u2022 Network Exposure: Unauthorized port forwarding or UPnP changes may expose internal\nservices to the Internet.\n\u2022 C2 Resilience: Blockchain-based naming infrastructure can make traditional domain-based C2\ndisruption more difficult.\n\u2022 Reputation Risk: Public IP addresses associated with infected devices may become linked to\nscanning, abuse, fraud, or other malicious activity.\n\u2022 Lateral Movement: Compromised IoT devices connected to enterprise networks may provide\nan additional pathway toward internal resources when network segmentation is insufficient.\n\u2022 Limited Visibility: Embedded devices often have limited logging and may not be covered by\nconventional EDR or endpoint security solutions.\nRECOMMENDATIONS\n\u2022 Identify and inventory all Internet-facing IoT devices, including routers, gateways, IP cameras,\nDVRs, and embedded Linux systems.\n\u2022 Apply the latest vendor firmware and security patches, and replace unsupported or end-of-life\ndevices.\n\u2022 Disable unnecessary Telnet, SSH, UPnP, and public-facing remote-management services.\n\u2022 Change default or weak administrative credentials to strong, unique passwords and enable MFA\nwhere supported.\n\u2022 Review NAT, port-forwarding, and router configurations for unauthorized changes and suspicious\ninbound or outbound traffic.\nAdvisory Number: DOH- 2026638 Published on: 17-Aug-2026\n\u2022 Isolate IoT devices through network segmentation and continuously monitor them for abnormal\ntraffic, DDoS activity, and suspicious C2 communications.\nREFERENCES\n:\n\u2022 https://cyberpress.org/dysphoria-botnet-hijacks-iot/\nPLEASE NOTE\n\u2022 Ensure all changes to the organization\u2019s environment shall be conducted in a controlled manner and\naligned with the established Change Management process.\n\u2022 Please test all patches and IOC in an UAT environment before deploying to production to avoid any\nservice disruptions.\nACTION\n\u2022 Kindly provide us with your feedback base on our recommendations.\n\u2022 Report any incidents detected relating to this advisory.\n\u2022 For inquiries and feedback, please contact DOH SOC at:\no Email: soc@example.invalid\no Phone: +000 0 0000000o Mobile: +000 0 0000000This circular is designed for regulatory procedures and \u064a \u0645\u0644\u0627\u0639\u0644\u0625\u0627 \u0631\u0634\u0646\u0644\u0644 \u0649\u0648\u062a\u062d\u0645\u0643 \u0635\u0635\u062e\u0645 \u0631\u064a\u063a\u0648 \u0629\u064a\u0645\u064a\u0638\u0646\u062a\u0644\u0627 \u062a\u0627\u0621\u0627\u0631\u062c\u0644\u0625\u0644 \u0645\u064a\u0645\u0639\u062a\u0644\u0627 \u0627\u0630\u0647\nshould not be used as content for media publication",
+  "pdf_ok": true,
+  "page_count": 4,
+  "tables": [
+   [
+    [
+     "",
+     "C2 Domains",
+     ""
+    ],
+    [
+     "dysphoria-c2.eth",
+     null,
+     null
+    ],
+    [
+     "dysphoria-net.eth",
+     null,
+     null
+    ],
+    [
+     "dysphoria-bot.sol",
+     null,
+     null
+    ],
+    [
+     "dysphoria-control.sol",
+     null,
+     null
+    ],
+    [
+     "iot-dysphoria.eth",
+     null,
+     null
+    ],
+    [
+     "",
+     "SHA-256",
+     ""
+    ],
+    [
+     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     null,
+     null
+    ],
+    [
+     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     null,
+     null
+    ],
+    [
+     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     null,
+     null
+    ]
+   ]
+  ]
+ }
+}

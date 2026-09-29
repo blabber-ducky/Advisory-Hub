@@ -1,0 +1,97 @@
+name: advisory-hub
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql+psycopg://advisory_hub:${POSTGRES_PASSWORD:-advisory_hub_dev}@postgres:5432/advisory_hub
+  REDIS_URL: redis://redis:6379/0
+  SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set — see .env.example}
+  BLOB_ROOT: /data/blobs
+  INBOX_PATH: /data/inbox
+  PROCESSING_PATH: /data/processing
+  ARCHIVE_PATH: /data/archive
+  FAILED_PATH: /data/failed
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_FORMAT: ${LOG_FORMAT:-json}
+  ENVIRONMENT: ${ENVIRONMENT:-production}
+  SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+  NVD_ENABLED: ${NVD_ENABLED:-true}
+  NVD_API_KEY: ${NVD_API_KEY:-}
+  FERNET_KEY: ${FERNET_KEY:-}
+  OUTBOUND_ALLOWLIST: ${OUTBOUND_ALLOWLIST:-}
+
+x-app-build: &app-build
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: advisory_hub
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-advisory_hub_dev}
+      POSTGRES_DB: advisory_hub
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U advisory_hub -d advisory_hub"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  app:
+    <<: *app-build
+    environment: *app-env
+    ports:
+      - "${APP_PORT:-8080}:8000"
+    # INBOX_HOST_PATH lets the watched inbox be a real host folder (where
+    # Power Automate / a mail rule drops emails) instead of the internal
+    # named volume — set it to an absolute host path in .env, e.g.
+    # INBOX_HOST_PATH=/srv/advisory-hub/inbox. Unset falls back to the
+    # named `inbox` volume below, unchanged from before.
+    volumes:
+      - blobs:/data/blobs
+      - ${INBOX_HOST_PATH:-inbox}:/data/inbox
+      - processing:/data/processing
+      - archive:/data/archive
+      - failed:/data/failed
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    restart: unless-stopped
+
+  worker:
+    <<: *app-build
+    environment: *app-env
+    command: ["python", "-m", "advisory_hub.worker"]
+    volumes:
+      - blobs:/data/blobs
+      - ${INBOX_HOST_PATH:-inbox}:/data/inbox
+      - processing:/data/processing
+      - archive:/data/archive
+      - failed:/data/failed
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  blobs:
+  inbox:
+  processing:
+  archive:
+  failed:

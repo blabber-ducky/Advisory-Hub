@@ -1,0 +1,34 @@
+# Development overrides. Applied automatically by `docker compose up`.
+#
+# Deliberately NOT part of docker-compose.yml: publishing the database and
+# Redis to the host is a development convenience, not something that should
+# happen on an on-prem deployment. Delete this file (or use
+# `docker compose -f docker-compose.yml ...`) for a production-shaped run.
+
+services:
+  postgres:
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  redis:
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+  app:
+    environment:
+      ENVIRONMENT: development
+      LOG_FORMAT: console
+      SESSION_COOKIE_SECURE: "false"
+    volumes:
+      # Live reload against the working tree.
+      - ./advisory_hub:/app/advisory_hub:ro
+      - ./migrations:/app/migrations:ro
+    command:
+      ["uvicorn", "advisory_hub.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  worker:
+    environment:
+      ENVIRONMENT: development
+      LOG_FORMAT: console
+    volumes:
+      - ./advisory_hub:/app/advisory_hub:ro

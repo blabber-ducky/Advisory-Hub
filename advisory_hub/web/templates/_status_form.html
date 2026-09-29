@@ -1,0 +1,50 @@
+{% import "_macros.html" as m %}
+<div class="detail-section" id="status-panel">
+  <h3>Status &amp; SLA</h3>
+  <div class="sla-line"><span class="label">Status</span> {{ m.status_badge(advisory.status.value) }}</div>
+  <div class="sla-line"><span class="label">Acknowledge by</span> {{ m.sla_badge(advisory.ack_due_at, advisory.acknowledged_at is not none, now) }}</div>
+  <div class="sla-line"><span class="label">Resolve by</span> {{ m.sla_badge(advisory.resolution_due_at, advisory.status.value in ('REMEDIATED','CLOSED','NOT_APPLICABLE','RISK_ACCEPTED'), now) }}</div>
+
+  {% if status_error %}
+  <p class="error" role="alert">{{ status_error }}</p>
+  {% endif %}
+
+  {% if next_statuses %}
+  <form class="status-form"
+        hx-post="/advisories/{{ advisory.id }}/status"
+        hx-target="#status-panel"
+        hx-swap="outerHTML">
+    <label for="to_status">Change status to</label>
+    <select name="to_status" id="to_status" onchange="ahToggleAckChannel(this)" required>
+      <option value="" disabled {{ 'selected' if not to_status else '' }}>Select a status&hellip;</option>
+      {% for s in next_statuses %}
+      <option value="{{ s.value }}" {{ 'selected' if to_status == s.value else '' }}>{{ s.value | replace('_', ' ') | title }}</option>
+      {% endfor %}
+    </select>
+
+    <label for="ack_channel" id="ack_channel_label" style="display:{{ 'block' if to_status == 'ACKNOWLEDGED' else 'none' }}">
+      Acknowledged via
+    </label>
+    <select name="ack_channel" id="ack_channel" style="display:{{ 'block' if to_status == 'ACKNOWLEDGED' else 'none' }}">
+      <option value="EMAIL" {{ 'selected' if ack_channel == 'EMAIL' else '' }}>Email</option>
+      <option value="PHONE" {{ 'selected' if ack_channel == 'PHONE' else '' }}>Phone</option>
+      <option value="OTHER" {{ 'selected' if ack_channel == 'OTHER' else '' }}>Other</option>
+    </select>
+
+    <label for="comment">Comment <span style="color:var(--muted);font-weight:normal">(required for every status change)</span></label>
+    <textarea name="comment" id="comment" rows="3" required>{{ comment or '' }}</textarea>
+
+    <button type="submit">Update status</button>
+  </form>
+  {% endif %}
+</div>
+
+<script>
+function ahToggleAckChannel(select) {
+  var show = select.value === 'ACKNOWLEDGED';
+  var label = document.getElementById('ack_channel_label');
+  var field = document.getElementById('ack_channel');
+  if (label) label.style.display = show ? 'block' : 'none';
+  if (field) field.style.display = show ? 'block' : 'none';
+}
+</script>

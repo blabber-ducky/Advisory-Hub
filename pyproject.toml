@@ -1,0 +1,94 @@
+[project]
+name = "advisory-hub"
+version = "0.1.0"
+description = "Internal security-advisory tracking, statistics, and remediation portal"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sqlalchemy>=2.0.36",
+    "alembic>=1.14",
+    "psycopg[binary]>=3.2",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+    "argon2-cffi>=23.1",
+    "structlog>=24.4",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.20",
+    "itsdangerous>=2.2",
+    "redis>=5.2",
+    "rq>=2.0",
+    "httpx>=0.28",
+    # Phase 1 ingestion — pinned now so the image is stable
+    "extract-msg>=0.52",
+    "pdfplumber>=0.11",
+    # XLSX IOC sidecars arrive from external email — never parse that XML with
+    # the stdlib (XXE / entity expansion). See CLAUDE.md §2.3.
+    "defusedxml>=0.7",
+    # Phase 2 — Fernet encryption for inventory-integration credentials at rest
+    "cryptography>=43",
+    # Phase 2c — evaluating inventory_source.schedule_cron for the sync poller
+    "croniter>=3.0",
+    # Phase 2d — PEP 440 version comparison in the matching engine
+    "packaging>=24.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[project.scripts]
+advisory-hub = "advisory_hub.cli:main"
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["advisory_hub*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["advisory_hub", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "S", "C4", "SIM", "RUF"]
+ignore = [
+    "S101",  # assert — used throughout tests
+    "B008",  # FastAPI Depends() in defaults is the documented idiom
+    "N811",  # `UUID as PgUUID` is the conventional SQLAlchemy dialect alias
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["advisory_hub"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test credentials are fixtures. The ambiguous-unicode rules are disabled
+# because several tests assert on exactly those characters — pdfplumber emits
+# non-breaking hyphens inside CVE IDs, and HTML bodies are full of NBSP.
+"tests/*" = ["S105", "S106", "RUF001", "RUF002", "RUF003"]
+"migrations/*" = ["E501", "N999"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+exclude = ["^migrations/versions/"]
+
+[[tool.mypy.overrides]]
+module = ["rq.*", "extract_msg.*", "pdfplumber.*", "croniter.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = ["integration: requires a live database"]
+
+[tool.coverage.run]
+source = ["advisory_hub"]

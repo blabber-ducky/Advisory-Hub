@@ -1,0 +1,82 @@
+{% import "_macros.html" as m %}
+{% if bulk_result is defined %}
+<div class="notice">
+  Queued {{ bulk_result.queued | length }} VirusTotal check{{ '' if bulk_result.queued | length == 1 else 's' }}
+  (rate-limited — they'll complete over the next few minutes).
+  {% if bulk_result.skipped_unsupported %}
+    {{ bulk_result.skipped_unsupported | length }} skipped (unsupported type).
+  {% endif %}
+  {% if bulk_result.skipped_not_found %}
+    {{ bulk_result.skipped_not_found | length }} skipped (not found).
+  {% endif %}
+</div>
+{% endif %}
+
+<div style="display:flex;justify-content:flex-end;margin-bottom:.6rem">
+  <a href="/iocs/export?{{ current_query_string }}" style="font-size:.85rem">
+    Export CSV (with VirusTotal results)
+  </a>
+</div>
+
+{% if result.items %}
+<form id="iocs-bulk-form">
+  <div style="margin-bottom:.6rem">
+    <button
+      type="button"
+      hx-post="/iocs/bulk-check-vt?{{ current_query_string }}"
+      hx-target="#iocs-table-region"
+      hx-swap="innerHTML"
+      hx-include="#iocs-bulk-form">
+      Check selected on VirusTotal
+    </button>
+    <span class="muted" style="font-size:.8rem;margin-left:.5rem">Free-tier rate limit respected — checks are queued, not immediate.</span>
+  </div>
+  <table class="tracker">
+    <thead>
+      <tr>
+        <th><input type="checkbox" onclick="ahToggleAllIocs(this)"></th>
+        <th>Type</th><th>Value</th><th>Advisory</th><th>Status</th><th>VirusTotal</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ioc in result.items %}
+      <tr>
+        <td><input type="checkbox" name="ioc_ids" value="{{ ioc.id }}" class="ioc-select"></td>
+        <td><span class="badge badge-neutral">{{ ioc.ioc_type.value }}</span></td>
+        <td class="ioc-value">{{ ioc.defanged_value }}</td>
+        <td><a href="/advisories/{{ ioc.advisory_id }}" class="ref">{{ ioc.advisory.external_ref or ioc.advisory_id }}</a></td>
+        <td>
+          {% set effective_status = effective_statuses[ioc.id] %}
+          {% include "_ioc_status_cell.html" %}
+        </td>
+        <td>
+          {% if ioc.ioc_type.value in vt_supported_types %}
+            {% set lookup = vt_lookups.get(ioc.id) %}
+            {{ m.vt_badge(lookup) }}
+          {% else %}
+            <span class="muted" style="font-size:.78rem">&mdash;</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</form>
+
+<div class="pagination">
+  <span>{{ result.total }} indicator{{ '' if result.total == 1 else 's' }} &middot; page {{ result.page }} of {{ result.total_pages }}</span>
+  <span>
+    {% if result.has_prev %}<a href="{{ page_url(result.page - 1) }}" hx-get="{{ page_url(result.page - 1) }}" hx-target="#iocs-table-region" hx-push-url="true">&larr; Prev</a>{% else %}<span class="disabled">&larr; Prev</span>{% endif %}
+    &nbsp;&middot;&nbsp;
+    {% if result.has_next %}<a href="{{ page_url(result.page + 1) }}" hx-get="{{ page_url(result.page + 1) }}" hx-target="#iocs-table-region" hx-push-url="true">Next &rarr;</a>{% else %}<span class="disabled">Next &rarr;</span>{% endif %}
+  </span>
+</div>
+{% else %}
+<div class="empty-state">No IOCs match these filters.</div>
+{% endif %}
+
+<script>
+function ahToggleAllIocs(master) {
+  document.querySelectorAll('.ioc-select').forEach(function (cb) { cb.checked = master.checked; });
+}
+</script>

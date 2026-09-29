@@ -1,0 +1,8 @@
+{% if error %}
+<p class="error">{{ error }}</p>
+{% else %}
+<p class="error" style="background:color-mix(in srgb, var(--status-good) 12%, transparent);border-color:var(--status-good);color:var(--status-good)">
+  Sync complete — {{ snapshot.device_count }} device(s), {{ snapshot.software_row_count }} software row(s).
+  {% if partial %}This snapshot is partial — see the source's last sync error for why.{% endif %}
+</p>
+{% endif %}

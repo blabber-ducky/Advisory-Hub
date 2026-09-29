@@ -1,0 +1,24 @@
+{% import "_macros.html" as m %}
+<span id="ioc-status-{{ ioc.id }}">
+  {{ m.ioc_status_badge(effective_status.value) }}
+  {% if ioc.remediation_status is none %}
+    <span class="muted" style="font-size:.72rem">(follows advisory)</span>
+  {% else %}
+    <span class="muted" style="font-size:.72rem">(overridden)</span>
+  {% endif %}
+  {% if can_edit is not defined or can_edit %}
+  <form
+    hx-post="/iocs/{{ ioc.id }}/status"
+    hx-target="#ioc-status-{{ ioc.id }}"
+    hx-swap="outerHTML"
+    style="margin-top:.25rem">
+    <select name="status_value" onchange="this.form.requestSubmit()" style="font-size:.76rem;padding:.2rem .3rem">
+      <option value="" {{ 'selected' if ioc.remediation_status is none else '' }}>Follow advisory</option>
+      <option value="DUE" {{ 'selected' if ioc.remediation_status and ioc.remediation_status.value == 'DUE' else '' }}>Due</option>
+      <option value="BLOCKED" {{ 'selected' if ioc.remediation_status and ioc.remediation_status.value == 'BLOCKED' else '' }}>Blocked</option>
+      <option value="IN_PROGRESS" {{ 'selected' if ioc.remediation_status and ioc.remediation_status.value == 'IN_PROGRESS' else '' }}>In Progress</option>
+      <option value="RESOLVED" {{ 'selected' if ioc.remediation_status and ioc.remediation_status.value == 'RESOLVED' else '' }}>Resolved</option>
+    </select>
+  </form>
+  {% endif %}
+</span>

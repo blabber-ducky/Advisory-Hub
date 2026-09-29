@@ -1,0 +1,109 @@
+{% import "_macros.html" as m %}
+<div class="detail-section" id="scan-panel">
+  <h3>Inventory scan</h3>
+
+  {% if scan_error %}
+  <p class="error" role="alert">{{ scan_error }}</p>
+  {% endif %}
+
+  {% if not snapshot_choices %}
+  <p style="color:var(--muted);font-size:.85rem">
+    No inventory snapshots available yet &mdash; <a href="/inventory">upload a CSV or sync a source</a> first.
+  </p>
+  {% else %}
+  <form hx-post="/advisories/{{ advisory_id }}/scan" hx-target="#scan-panel" hx-swap="outerHTML">
+    <div class="chip-list" style="margin-bottom:.5rem">
+      {% for snap in snapshot_choices %}
+      <label style="display:inline-flex;align-items:center;gap:.3rem;font-size:.82rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:.25rem .5rem">
+        <input type="checkbox" name="snapshot_ids" value="{{ snap.id }}" checked>
+        {{ snap.source.name }}
+        <span style="color:var(--muted)">({{ snap.software_row_count }} rows, {{ snap.taken_at.strftime('%Y-%m-%d') }})</span>
+      </label>
+      {% endfor %}
+    </div>
+    <button type="submit">Scan inventory</button>
+  </form>
+  {% endif %}
+
+  {% if latest_run %}
+  <div style="margin-top:1rem">
+    {% if latest_run.status.value == 'FAILED' %}
+    <p class="error" role="alert">Scan failed: {{ latest_run.error }}</p>
+    {% else %}
+    <p style="font-size:.85rem;color:var(--muted);margin:0 0 .6rem">
+      Scan of {{ latest_run.snapshot_ids | length }} source{{ '' if latest_run.snapshot_ids | length == 1 else 's' }}
+      &middot; {{ latest_run.finished_at.strftime('%Y-%m-%d %H:%M UTC') if latest_run.finished_at else 'running' }}
+      &middot; {{ latest_run.match_count }} match{{ '' if latest_run.match_count == 1 else 'es' }}
+      &middot; {{ latest_run.affected_device_count or 0 }} affected endpoint{{ '' if latest_run.affected_device_count == 1 else 's' }}
+    </p>
+
+    {% for tier in ['CONFIRMED', 'LIKELY', 'POSSIBLE'] %}
+    {% set tier_matches = latest_run.matches | selectattr('confidence.value', 'equalto', tier) | list %}
+    {% if tier_matches %}
+    <div style="margin-bottom:.7rem">
+      <div style="margin-bottom:.3rem">{{ m.confidence_badge(tier) }}
+        <span style="font-size:.8rem;color:var(--muted)">{{ tier_matches | length }} match{{ '' if tier_matches | length == 1 else 'es' }}</span>
+      </div>
+      <table class="product-table">
+        <thead><tr><th>Product</th><th>Version</th><th>CVE</th><th>Endpoints</th><th>Source</th></tr></thead>
+        <tbody>
+          {% for match in tier_matches %}
+          <tr title="{{ match.rationale }}">
+            <td>{{ match.vendor or '&mdash;' }}:{{ match.product }}</td>
+            <td style="font-family:ui-monospace,monospace;font-size:.78rem">{{ match.matched_version }}</td>
+            <td>{{ match.cve_id or '&mdash;' }}</td>
+            <td>{{ match.device_count }}</td>
+            <td style="font-size:.78rem;color:var(--muted)">{{ match.snapshot.source.name }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% endfor %}
+
+    {% if not latest_run.matches %}
+    <p style="color:var(--muted);font-size:.85rem">No affected products found in the scanned inventory.</p>
+    {% endif %}
+
+    {% if coverage_gaps %}
+    <div style="margin-top:.6rem">
+      <span class="badge badge-warning">Not found</span>
+      <span style="font-size:.8rem;color:var(--muted)">
+        {{ coverage_gaps | length }} affected product{{ '' if coverage_gaps | length == 1 else 's' }} had no inventory match
+      </span>
+      <p style="font-size:.78rem;color:var(--muted);margin:.3rem 0 0">
+        {% for vendor, product in coverage_gaps %}{{ vendor }}:{{ product }}{% if not loop.last %}, {% endif %}{% endfor %}
+      </p>
+      <p style="font-size:.76rem;color:var(--muted);margin:.2rem 0 0;font-style:italic">
+        "Not found" means no scanned source reports this product &mdash; not that it's absent from the estate.
+      </p>
+    </div>
+    {% endif %}
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if history | length > 1 %}
+  <div style="margin-top:.8rem">
+    <h4 style="font-size:.82rem;margin:0 0 .3rem;color:var(--muted)">Scan history</h4>
+    <table class="ioc-table">
+      <thead><tr><th>Date</th><th>Sources</th><th>Status</th><th>Matches</th></tr></thead>
+      <tbody>
+        {% for run in history %}
+        <tr>
+          <td style="font-size:.78rem">{{ run.finished_at.strftime('%Y-%m-%d %H:%M') if run.finished_at else run.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td style="font-size:.78rem">{{ run.snapshot_ids | length }}</td>
+          <td>
+            {% if run.status.value == 'COMPLETE' %}<span class="badge badge-good">Complete</span>
+            {% elif run.status.value == 'FAILED' %}<span class="badge badge-critical">Failed</span>
+            {% else %}<span class="badge badge-neutral">{{ run.status.value | title }}</span>{% endif %}
+          </td>
+          <td style="font-size:.78rem">{{ run.match_count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>

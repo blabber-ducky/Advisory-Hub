@@ -1,0 +1,20 @@
+{% import "_macros.html" as m %}
+<span id="vt-{{ ioc.id }}">
+  {% if vt_error %}
+  <span class="badge badge-warning" title="{{ vt_error }}">{{ vt_error_label or 'Check failed' }}</span>
+  {% else %}
+  {{ m.vt_badge(lookup) }}
+  {% if lookup and lookup.permalink %}
+    <a href="{{ lookup.permalink }}" target="_blank" rel="noopener noreferrer" style="font-size:.76rem;margin-left:.3rem">report&nbsp;&#8599;</a>
+  {% endif %}
+  {% if lookup %}
+    <a href="#" style="font-size:.76rem;margin-left:.4rem"
+       hx-post="/advisories/{{ advisory_id }}/iocs/{{ ioc.id }}/check-vt?force=1"
+       hx-target="#vt-{{ ioc.id }}" hx-swap="outerHTML">recheck</a>
+  {% else %}
+    <a href="#" style="font-size:.76rem;margin-left:.4rem"
+       hx-post="/advisories/{{ advisory_id }}/iocs/{{ ioc.id }}/check-vt"
+       hx-target="#vt-{{ ioc.id }}" hx-swap="outerHTML">check</a>
+  {% endif %}
+  {% endif %}
+</span>

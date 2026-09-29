@@ -1,0 +1,226 @@
+# Operations
+
+Deployment, configuration, and runbooks. Update this doc whenever a container,
+volume, environment variable, or operational step changes.
+
+> Phase 0 is implemented and verified. Ingestion, enrichment, and inventory
+> sections describe the target shape for later phases.
+
+## 0. Running it
+
+```bash
+cp .env.example .env
+python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_urlsafe(48))" >> .env
+docker compose up -d
+docker compose exec app alembic upgrade head
+docker compose exec app python -m advisory_hub.cli create-admin
+```
+
+**`SECRET_KEY` is mandatory** — compose refuses to interpolate without it, and
+the app refuses to start in production if it is still a placeholder. Both
+failures are deliberate: the alternative is issuing forgeable session cookies.
+
+`docker-compose.override.yml` is picked up automatically and adds development
+conveniences: published Postgres/Redis ports, live reload, console logging,
+non-secure cookies. **For a production-shaped run, bypass it:**
+
+```bash
+docker compose -f docker-compose.yml up -d
+```
+
+`APP_PORT` (default `8080`), `POSTGRES_PORT`, and `REDIS_PORT` are overridable
+when a port is already taken.
+
+### CLI
+
+| Command | Does |
+|---|---|
+| `create-admin` | Create an administrator (prompts for the password) |
+| `create-token` | Mint a scoped API token — **shown once** |
+| `list-users` | List accounts and roles |
+| `check` | Verify database, blob volume, inbox, and schema |
+
+## 1. Containers
+
+| Service | Image | Role |
+|---|---|---|
+| `app` | built from `docker/Dockerfile` | FastAPI: UI, REST API, MCP HTTP transport |
+| `worker` | same image, different command | RQ worker: ingestion, enrichment, inventory sync, scans |
+| `scheduler` | same image | RQ scheduler for cron-style inventory syncs (Phase 2) |
+| `postgres` | `postgres:16-alpine` | System of record |
+| `redis` | `redis:7-alpine` | Job queue, NVD cache, rate limiting |
+
+## 2. Volumes
+
+| Mount | Purpose | Backed up |
+|---|---|---|
+| `/data/inbox` | Power Automate drop target (also mounted on the Windows/PA side) | No — transient |
+| `/data/processing` | Worker claim area | No |
+| `/data/archive` | Successfully ingested originals | **Yes** |
+| `/data/failed` | Failed ingests + `.error.json` sidecars | **Yes** |
+| `/data/blobs` | Content-addressed store | **Yes — critical** |
+| `pgdata` | PostgreSQL | **Yes — critical** |
+
+**`/data/inbox` is a named volume by default**, isolated inside Docker. Set
+`INBOX_HOST_PATH` (compose-level, not read by the app itself — see §3) to an
+absolute host path to bind-mount a real folder there instead — e.g. one a
+Power Automate flow or a mail rule on this host writes `.msg` files into
+directly. `inbox/` being on a different filesystem than `processing/` this
+way is handled transparently by `Inbox.claim()` (a cross-device fallback,
+same-filesystem claim-in-place then a copy — see `ingest/watcher.py`'s
+module docstring and docs/decisions.md D-029); no operational difference
+either way. Both `app` and `worker` mount whichever one is active; `app`'s
+`/health` endpoint reports the mount as unhealthy if the host folder is
+missing or inaccessible, so a misconfigured path is visible immediately
+rather than silently dropping emails.
+
+## 3. Configuration
+
+Every variable belongs in `.env.example` with a dummy value and a comment.
+
+| Variable | Required | Notes |
+|---|---|---|
+| `DATABASE_URL` | yes | `postgresql+psycopg://…` |
+| `REDIS_URL` | yes | |
+| `SECRET_KEY` | yes | Session signing. Rotating logs everyone out. |
+| `FERNET_KEY` | yes (Phase 2) | Integration-credential encryption. **Losing this means re-entering every credential.** Back it up separately from the database. |
+| `FERNET_KEY_PREVIOUS` | no | Set during key rotation — `MultiFernet` tries both keys on decrypt, so rows encrypted under the old key keep working until re-encrypted; remove once rotation is complete |
+| `BLOB_ROOT` | yes | Default `/data/blobs` |
+| `INBOX_PATH` | yes | In-container path, default `/data/inbox` — what the app/worker actually read |
+| `INBOX_HOST_PATH` | no | **Compose-level only, not read by the app.** Absolute host path bind-mounted at `/data/inbox` in place of the internal named volume — set this to point the watcher at a real folder of emails. Unset keeps the named volume. |
+| `INBOX_POLL_SECONDS` | no | Default `30` |
+| `NVD_API_KEY` | recommended | Raises the rate limit from 5 → 50 requests per 30s. **Overridden by an admin-panel-configured key** (`/admin`, ADMIN role) if one is set — see docs/decisions.md D-031. Either way works; the admin panel takes effect immediately, no restart. |
+| `NVD_ENABLED` | no | Default `true`; `false` for air-gapped operation. Also overridable per D-031 — disabling from `/admin` wins over this. |
+| `VT_API_KEY` | no | VirusTotal API key for the analyst-triggered "Check on VirusTotal" IOC action. Same admin-panel override as `NVD_API_KEY`. Unset (both here and in the admin panel): the button/endpoint still exists, but returns a clear "not configured" error (`502`) rather than being hidden. |
+| `VT_ENABLED` | no | Default `true`. Overridable from `/admin` per D-031. |
+| `PDF_MAX_BYTES` | no | Default `52428800` (50 MB) |
+| `PDF_MAX_PAGES` | no | Default `500` |
+| `PDF_TIMEOUT_SECONDS` | no | Default `120` |
+| `OCR_ENABLED` | no | Default `false` — turn on only if scanned PDFs actually appear |
+| `OUTBOUND_ALLOWLIST` | yes (Phase 2) | Comma-separated hostnames the SSRF guard permits. For the Azure ARM and MS Graph adapters this must include **both** the API host (`management.azure.com` / `graph.microsoft.com`) **and** `login.microsoftonline.com` — the OAuth token endpoint is a separate outbound call, also SSRF-checked. |
+| `CSV_MAX_BYTES` | no | Default `20971520` (20 MB) — inventory CSV upload size cap |
+| `CSV_MAX_ROWS` | no | Default `200000` — inventory CSV row cap, enforced while parsing |
+| `INVENTORY_SYNC_POLL_SECONDS` | no | Default `300` — how often the worker checks active API sources for a due `schedule_cron` |
+| `SESSION_COOKIE_SECURE` | no | Default `true`; `false` only for local HTTP dev. |
+| `LOG_LEVEL` | no | Default `INFO` |
+
+## 4. Backup
+
+Critical set: `pgdata`, `/data/blobs`, `/data/archive`, `/data/failed`, and the
+`FERNET_KEY` (stored separately — in your secrets manager, not next to the DB dump).
+
+```bash
+# Database
+docker compose exec -T postgres pg_dump -U advisory_hub -Fc advisory_hub \
+  > backup/db-$(date +%F).dump
+
+# Blobs — content-addressed, so incremental sync is safe and cheap
+rsync -a --delete /data/blobs/ /backup/blobs/
+rsync -a /data/archive/ /backup/archive/
+```
+
+**Restore is not backup.** Exercise a full restore into a scratch environment at
+least once per quarter and record the date. A restore that has never been tried
+is a hypothesis.
+
+## 5. Runbooks
+
+### Advisory didn't appear after Power Automate ran
+
+1. Is the file in `/data/inbox`? If not, the problem is upstream in the flow.
+2. Does it end in `.eml`/`.msg`? The watcher ignores anything else — check the
+   flow is doing the `.tmp` → rename dance and not leaving the temp extension.
+3. Check `/data/failed/` for the file plus its `.error.json` sidecar.
+4. `docker compose logs worker --tail 200`.
+5. If it was ingested before, dedupe skipped it by design — search by
+   `Message-ID` to find the existing advisory.
+
+### PDF text extraction failed
+
+Check `advisory_attachment.extraction_method` and `extraction_error`.
+
+- `FAILED` with `NO_TEXT_LAYER` → scanned PDF. Set `OCR_ENABLED=true`, restart the
+  worker, then `reparse` that advisory.
+- `FAILED` with a timeout or limit breach → possibly hostile, possibly just
+  enormous. Inspect the original in `/data/archive` before raising limits.
+- The advisory still exists with its email content in both cases. Nothing is lost.
+
+### Enriching a backlog (e.g. after go-live backfill)
+
+`advisory-hub enrich` is safe to re-run and safe to interrupt: every CVE's
+outcome is recorded, so a second run resumes where the first stopped.
+
+**Throughput is bounded by NVD's rate limit, and the API key matters a great
+deal.** Measured against the live API:
+
+| | Requests / 30s | 404 CVEs (one corpus backfill) |
+|---|---|---|
+| Anonymous | 4 (of a documented 5) | **~50 minutes** |
+| With `NVD_API_KEY` | 45 (of a documented 50) | **~5 minutes** |
+
+Get a key from <https://nvd.nist.gov/developers/request-an-api-key>. Repeat
+lookups are served from Redis (24h for hits, 1h for misses), so re-runs and
+CVEs shared across advisories cost nothing.
+
+```bash
+docker compose exec app python -m advisory_hub.cli enrich          # everything due
+docker compose exec app python -m advisory_hub.cli enrich --limit 100
+docker compose exec app python -m advisory_hub.cli enrich --force  # ignore freshness
+```
+
+The worker also sweeps every 5 minutes in the background, so steady-state
+operation needs no manual runs.
+
+### NVD enrichment stuck on `PENDING`
+
+1. `NVD_ENABLED` set? `NVD_API_KEY` present?
+2. Can the container reach `services.nvd.nist.gov`? Check egress rules.
+3. Rate limited? Look for `429` in worker logs; backoff is automatic.
+4. Force a retry: `python -m advisory_hub.cli enrich --force`.
+5. `ERROR` rows are retried automatically for 30 days, then left alone so a
+   permanently broken record stops consuming the rate-limit budget.
+
+### Rotate an integration credential
+
+1. Admin → Inventory → source → *Rotate credential* → enter the new secret.
+2. Run *Test connection* and confirm success.
+3. The old ciphertext is overwritten; the rotation is audit-logged.
+
+Values are never displayed — if the current secret is unknown, obtain a new one
+from the upstream system rather than trying to recover it here.
+
+### Rotate `FERNET_KEY`
+
+1. Set `FERNET_KEY_PREVIOUS` to the current key, `FERNET_KEY` to the new one.
+2. `python -m advisory_hub.cli rotate-credentials` — re-encrypts every row and
+   bumps `key_version`.
+3. Verify each source with *Test connection*, then remove `FERNET_KEY_PREVIOUS`.
+
+### Reparse after a parser improvement
+
+```bash
+docker compose exec app python -m advisory_hub.cli reparse \
+    --since 2026-01-01 --parser-version-below 3 --dry-run
+```
+
+Review the dry-run diff, then re-run without `--dry-run`. Status, assignee,
+comments, and history are never touched.
+
+## 6. Monitoring
+
+Minimum viable signals:
+
+| Signal | Alert when |
+|---|---|
+| Files in `/data/failed` | `> 0` for more than 1 hour |
+| Oldest unprocessed file in `/data/inbox` | Older than 10 minutes |
+| RQ queue depth | Growing over 30 minutes |
+| `enrichment_status = PENDING` count | Rising over 6 hours (expected briefly after ingest; the worker sweeps every 5 min) |
+| `enrichment_status = ERROR` count | Rising — usually NVD unreachable or a bad `NVD_API_KEY` |
+| `inventory_source.last_sync_status = ERROR` | Any (Phase 2) |
+| Disk free on the blob volume | `< 20%` |
+| Postgres connection count | Near `max_connections` |
+
+`/health` reports database, Redis, blob-volume writability, and inbox
+reachability as separate checks — a single boolean would hide exactly the
+failures worth alerting on.

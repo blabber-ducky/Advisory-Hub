@@ -1,0 +1,190 @@
+{# Shared rendering helpers. Status/severity color mapping lives ONLY here —
+   never duplicated in Python or in another template. #}
+
+{% macro severity_badge(severity) %}
+  {%- if severity == 'CRITICAL' -%}
+    <span class="badge badge-critical">Critical</span>
+  {%- elif severity == 'HIGH' -%}
+    <span class="badge badge-serious">High</span>
+  {%- elif severity == 'MEDIUM' -%}
+    <span class="badge badge-warning">Medium</span>
+  {%- elif severity == 'LOW' -%}
+    <span class="badge badge-good">Low</span>
+  {%- elif severity == 'INFO' -%}
+    <span class="badge badge-neutral">Info</span>
+  {%- else -%}
+    <span class="badge badge-neutral">Unrated</span>
+  {%- endif -%}
+{% endmacro %}
+
+{% macro type_badge(type) %}
+  {%- if type == 'CVE_ADVISORY' -%}
+    <span class="badge badge-neutral">CVE Advisory</span>
+  {%- elif type == 'SECURITY_BULLETIN' -%}
+    <span class="badge badge-neutral">Security Bulletin</span>
+  {%- elif type == 'THREAT_LANDSCAPE' -%}
+    <span class="badge badge-neutral">Threat Landscape</span>
+  {%- else -%}
+    <span class="badge badge-neutral">Other</span>
+  {%- endif -%}
+{% endmacro %}
+
+{# Status badges follow workflow stage, not a fixed severity mapping:
+   NEW/ACKNOWLEDGED read as attention-needed (warning), active work as
+   neutral, terminal states as good/neutral. #}
+{% macro status_badge(status) %}
+  {%- if status == 'NEW' -%}
+    <span class="badge badge-critical">New</span>
+  {%- elif status == 'ACKNOWLEDGED' -%}
+    <span class="badge badge-warning">Acknowledged</span>
+  {%- elif status == 'TRIAGED' -%}
+    <span class="badge badge-neutral">Triaged</span>
+  {%- elif status == 'IN_PROGRESS' -%}
+    <span class="badge badge-neutral">In Progress</span>
+  {%- elif status == 'AWAITING_VENDOR' -%}
+    <span class="badge badge-neutral">Awaiting Vendor</span>
+  {%- elif status == 'REMEDIATED' -%}
+    <span class="badge badge-good">Remediated</span>
+  {%- elif status == 'RISK_ACCEPTED' -%}
+    <span class="badge badge-neutral">Risk Accepted</span>
+  {%- elif status == 'NOT_APPLICABLE' -%}
+    <span class="badge badge-neutral">Not Applicable</span>
+  {%- elif status == 'CLOSED' -%}
+    <span class="badge badge-good">Closed</span>
+  {%- else -%}
+    <span class="badge badge-neutral">{{ status }}</span>
+  {%- endif -%}
+{% endmacro %}
+
+{# SLA due-date rendering: overdue is critical, due within 2h is warning,
+   otherwise neutral. Never bare color — always paired with the label. #}
+{% macro sla_badge(due_at, done, now) %}
+  {%- if done -%}
+    <span class="badge badge-good">Met</span>
+  {%- elif due_at is none -%}
+    <span class="badge badge-neutral">&mdash;</span>
+  {%- else -%}
+    {%- set overdue = due_at < now -%}
+    {%- set soon = (not overdue) and ((due_at - now).total_seconds() < 7200) -%}
+    {%- if overdue -%}
+      <span class="badge badge-critical" title="{{ due_at.strftime('%Y-%m-%d %H:%M UTC') }}">Overdue</span>
+    {%- elif soon -%}
+      <span class="badge badge-warning" title="{{ due_at.strftime('%Y-%m-%d %H:%M UTC') }}">Due soon</span>
+    {%- else -%}
+      <span class="badge badge-neutral" title="{{ due_at.strftime('%Y-%m-%d %H:%M UTC') }}">{{ due_at.strftime('%b %-d, %H:%M') }}</span>
+    {%- endif -%}
+  {%- endif -%}
+{% endmacro %}
+
+{# Scan-match confidence — never collapsed into a plain yes/no, per
+   CLAUDE.md §2.2 ("extraction results are evidence, not truth"). #}
+{% macro confidence_badge(confidence) %}
+  {%- if confidence == 'CONFIRMED' -%}
+    <span class="badge badge-critical">Confirmed</span>
+  {%- elif confidence == 'LIKELY' -%}
+    <span class="badge badge-warning">Likely</span>
+  {%- elif confidence == 'POSSIBLE' -%}
+    <span class="badge badge-neutral">Possible</span>
+  {%- else -%}
+    <span class="badge badge-neutral">{{ confidence }}</span>
+  {%- endif -%}
+{% endmacro %}
+
+{# A VirusTotal verdict is community-sourced evidence, not a fact this app
+   asserts — always paired with the vendor counts it's derived from. #}
+{% macro vt_badge(lookup) %}
+  {%- if lookup is none -%}
+    <span class="badge badge-neutral">Not checked</span>
+  {%- elif lookup.status.value == 'ERROR' -%}
+    <span class="badge badge-warning" title="{{ lookup.error }}">Check failed</span>
+  {%- elif lookup.status.value == 'NOT_FOUND' -%}
+    <span class="badge badge-neutral">Unseen by VT</span>
+  {%- elif lookup.malicious_count and lookup.malicious_count > 0 -%}
+    <span class="badge badge-critical">Malicious ({{ lookup.malicious_count }})</span>
+  {%- elif lookup.suspicious_count and lookup.suspicious_count > 0 -%}
+    <span class="badge badge-warning">Suspicious ({{ lookup.suspicious_count }})</span>
+  {%- else -%}
+    <span class="badge badge-good">Clean (0/{{ (lookup.harmless_count or 0) + (lookup.undetected_count or 0) }})</span>
+  {%- endif -%}
+{% endmacro %}
+
+{# An IOC's remediation status — either derived from its advisory's own
+   status, or an explicit per-IOC override. The badge itself doesn't say
+   which; the surrounding UI (a "Following advisory" vs "Overridden" label)
+   carries that distinction. #}
+{% macro ioc_status_badge(status) %}
+  {%- if status == 'DUE' -%}
+    <span class="badge badge-critical">Due</span>
+  {%- elif status == 'BLOCKED' -%}
+    <span class="badge badge-warning">Blocked</span>
+  {%- elif status == 'IN_PROGRESS' -%}
+    <span class="badge badge-neutral">In Progress</span>
+  {%- elif status == 'RESOLVED' -%}
+    <span class="badge badge-good">Resolved</span>
+  {%- else -%}
+    <span class="badge badge-neutral">{{ status }}</span>
+  {%- endif -%}
+{% endmacro %}
+
+{# IOC-type labels, as [chip, full name] pairs. A tracker row has space for
+   `Registry`, not `REGISTRY_KEY` spelled out — but the full name and the
+   count are always in the tooltip, never only the abbreviation. Kept as one
+   mapping so the two can't drift, and kept here alongside the other label
+   mappings rather than duplicated in Python. Deliberately spelled out rather
+   than derived with `| title`, which renders MD5/IPv4/SHA256 as Md5/Ipv4/Sha256. #}
+{% set IOC_TYPE_LABELS = {
+  'IPV4':         ['IP',       'IPv4 address'],
+  'IPV6':         ['IPv6',     'IPv6 address'],
+  'DOMAIN':       ['Domain',   'Domain'],
+  'URL':          ['URL',      'URL'],
+  'MD5':          ['MD5',      'MD5 hash'],
+  'SHA1':         ['SHA1',     'SHA1 hash'],
+  'SHA256':       ['SHA256',   'SHA256 hash'],
+  'EMAIL':        ['Email',    'Email address'],
+  'FILENAME':     ['File',     'Filename'],
+  'FILEPATH':     ['Path',     'File path'],
+  'REGISTRY_KEY': ['Registry', 'Registry key'],
+  'MUTEX':        ['Mutex',    'Mutex'],
+  'USER_AGENT':   ['UA',       'User agent'],
+  'OTHER':        ['Other',    'Other'],
+} %}
+
+{# An unmapped type (a new enum member nobody has labelled yet) falls back to
+   its own raw value rather than rendering blank. #}
+{% macro ioc_type_label(ioc_type, full=False) -%}
+  {{- IOC_TYPE_LABELS.get(ioc_type, [ioc_type, ioc_type])[1 if full else 0] -}}
+{%- endmacro %}
+
+{# The "N IOCs" total plus a chip per distinct kind. `max_chips` caps the row
+   width; anything past it collapses to a "+N" chip whose tooltip still names
+   every kind, so the mix is never silently truncated. Renders nothing at all
+   for an advisory with no indicators. #}
+{% macro ioc_summary(breakdown, max_chips=4) %}
+  {%- if breakdown and breakdown.total -%}
+  {%- set parts = [] -%}
+  {%- for ioc_type, count in breakdown.by_count -%}
+    {%- set _ = parts.append(ioc_type_label(ioc_type.value, full=True) | trim ~ ' (' ~ count ~ ')') -%}
+  {%- endfor -%}
+  {%- set tooltip = breakdown.total ~ ' indicator' ~ ('s' if breakdown.total != 1 else '') ~
+      ' across ' ~ breakdown.type_count ~ ' type' ~ ('s' if breakdown.type_count != 1 else '') ~
+      ': ' ~ parts | join(', ') -%}
+  <span class="ioc-summary">
+    <span class="badge badge-neutral" title="{{ tooltip }}">{{ breakdown.total }} IOC{{ 's' if breakdown.total != 1 else '' }}</span>
+    {%- for ioc_type, count in breakdown.by_count[:max_chips] %}
+    <span class="chip chip-ioc" title="{{ count }} &times; {{ ioc_type_label(ioc_type.value, full=True) | trim }}">{{ ioc_type_label(ioc_type.value) }}</span>
+    {%- endfor %}
+    {%- if breakdown.type_count > max_chips %}
+    <span class="chip chip-ioc" title="{{ tooltip }}">+{{ breakdown.type_count - max_chips }}</span>
+    {%- endif %}
+  </span>
+  {%- endif -%}
+{% endmacro %}
+
+{% macro flag_dot(flags) %}
+  {%- set unresolved = flags | selectattr('resolved_at', 'none') | list -%}
+  {%- if unresolved -%}
+    <span class="row-flags">
+      <span class="flag-dot" title="{{ unresolved | map(attribute='kind') | map('replace', '_', ' ') | join(', ') | title }}"></span>
+    </span>
+  {%- endif -%}
+{% endmacro %}

@@ -1,0 +1,63 @@
+{% import "_macros.html" as m %}
+{# Rendered both on full page load and as an HTMX partial when filters change
+   (target #tracker-body via hx-get, so the KPI tiles above stay put). #}
+<div id="tracker-body">
+  {% if result.items %}
+  <table class="tracker">
+    <thead>
+      <tr>
+        <th>Source</th>
+        <th>Type</th>
+        <th class="col-title">Title</th>
+        <th>Severity</th>
+        <th>Status</th>
+        <th>Acknowledge by</th>
+        <th>Last comment</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for advisory in result.items %}
+      <tr class="advisory-row" onclick="location.href='/advisories/{{ advisory.id }}'">
+        <td>{{ advisory.source.short_code }}</td>
+        <td>{{ m.type_badge(advisory.type.value) }}</td>
+        <td class="col-title">
+          <a class="ref" href="/advisories/{{ advisory.id }}">{{ advisory.external_ref or '&mdash;' }}</a>
+          {{ m.flag_dot(advisory.flags) }}
+          {{ m.ioc_summary(ioc_breakdowns.get(advisory.id)) }}
+          <span class="title">{{ advisory.title }}</span>
+        </td>
+        <td>{{ m.severity_badge(advisory.severity.value if advisory.severity else none) }}</td>
+        <td>{{ m.status_badge(advisory.status.value) }}</td>
+        <td>{{ m.sla_badge(advisory.ack_due_at, advisory.acknowledged_at is not none, now) }}</td>
+        <td class="last-comment">
+          {%- set c = last_comments.get(advisory.id) -%}
+          {%- if c -%}{{ c.body[:90] }}{%- else -%}<span style="color:var(--border)">No comments yet</span>{%- endif -%}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="pagination">
+    <span>{{ result.total }} advisor{{ 'y' if result.total == 1 else 'ies' }} &middot; page {{ result.page }} of {{ result.total_pages }}</span>
+    <span>
+      {% if result.has_prev %}
+        <a href="#" hx-get="{{ page_url(result.page - 1) }}" hx-target="#tracker-body" hx-swap="outerHTML" hx-push-url="true">&larr; Previous</a>
+      {% else %}<span class="disabled">&larr; Previous</span>{% endif %}
+      &nbsp;&nbsp;
+      {% if result.has_next %}
+        <a href="#" hx-get="{{ page_url(result.page + 1) }}" hx-target="#tracker-body" hx-swap="outerHTML" hx-push-url="true">Next &rarr;</a>
+      {% else %}<span class="disabled">Next &rarr;</span>{% endif %}
+    </span>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    {% if filters_active %}
+      <p>No advisories match these filters.</p>
+      <p><a href="/">Clear filters</a></p>
+    {% else %}
+      <p>No advisories yet. Drop a <code>.msg</code> or <code>.eml</code> into the watched inbox to get started.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>

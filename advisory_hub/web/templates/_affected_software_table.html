@@ -1,0 +1,37 @@
+{% import "_macros.html" as m %}
+{% if refresh_report is defined %}
+<div class="notice">
+  Refreshed {{ refresh_report.refreshed | length }} advisor{{ 'y' if refresh_report.refreshed | length == 1 else 'ies' }}.
+  {% if refresh_report.failed %}
+    <span style="color:var(--danger)">{{ refresh_report.failed | length }} failed:
+    {% for advisory_id, error in refresh_report.failed %}{{ advisory_id }} ({{ error }}){% if not loop.last %}, {% endif %}{% endfor %}</span>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if rows %}
+<table class="tracker">
+  <thead>
+    <tr>
+      <th>Product</th><th>Version</th><th>Affected hosts</th><th>Severity</th>
+      <th>Advisory</th><th>Status</th><th>Confidence</th><th>Scanned</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr onclick="window.location='/advisories/{{ row.advisory_id }}'">
+      <td>{{ row.vendor + ' / ' if row.vendor else '' }}{{ row.product }}</td>
+      <td style="font-family:ui-monospace,monospace;font-size:.82rem">{{ row.matched_version }}</td>
+      <td>{{ row.device_count }}</td>
+      <td>{{ m.severity_badge(row.advisory_severity.value if row.advisory_severity else none) }}</td>
+      <td><span class="col-title"><span class="ref">{{ row.advisory_external_ref or row.advisory_id }}</span></span></td>
+      <td>{{ m.status_badge(row.advisory_status.value) }}</td>
+      <td>{{ m.confidence_badge(row.confidence.value) }}</td>
+      <td class="muted" style="font-size:.8rem">{{ row.scanned_at.strftime('%Y-%m-%d %H:%M UTC') if row.scanned_at else '&mdash;' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">No affected software found yet — scan an advisory, or click "Refresh all" once at least one advisory has been scanned.</div>
+{% endif %}

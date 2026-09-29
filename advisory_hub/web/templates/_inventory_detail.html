@@ -1,0 +1,77 @@
+<div class="detail-panel">
+  <div class="detail-grid">
+    <div>
+      <div class="detail-section">
+        <h3>Configuration</h3>
+        <dl class="kv">
+          <dt>Kind</dt><dd>{{ source.kind.value | replace('_', ' ') | title }}</dd>
+          <dt>Mode</dt><dd>{{ source.mode.value | title }}</dd>
+          <dt>Has credential</dt><dd>{{ 'Yes' if source.credential_id else 'No' }}</dd>
+          <dt>Base URL</dt><dd>{{ source.config.get('base_url', '&mdash;') if source.config else '&mdash;' }}</dd>
+          <dt>Sync schedule</dt><dd>{{ source.schedule_cron or '&mdash;' }}</dd>
+          <dt>Last sync error</dt><dd>{{ source.last_sync_error or '&mdash;' }}</dd>
+        </dl>
+      </div>
+
+      <div class="detail-section">
+        <h3>History</h3>
+        {% if history %}
+        <div class="comment-list">
+          {% for entry in history %}
+          <div class="comment">
+            <div class="meta">{{ entry.action }} &middot; {{ entry.actor_label or 'system' }} &middot; {{ entry.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+            {% if entry.detail %}
+            <div class="body" style="font-size:.8rem;color:var(--muted)">{% for k, v in entry.detail.items() %}{{ k }}: {{ v }}{% if not loop.last %} &middot; {% endif %}{% endfor %}</div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="muted" style="font-size:.85rem">No history yet.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div>
+      {% if can_manage %}
+      <div class="detail-section">
+        <h3>Actions</h3>
+        <div id="test-result-{{ source.id }}"></div>
+        <button type="button"
+                hx-post="/inventory/sources/{{ source.id }}/test"
+                hx-target="#test-result-{{ source.id }}"
+                hx-swap="innerHTML"
+                style="margin-top:.4rem">Test connection</button>
+        <button type="button"
+                hx-post="/inventory/sources/{{ source.id }}/toggle"
+                hx-target="body" hx-swap="none"
+                style="margin-top:.4rem;margin-left:.5rem;background:var(--muted)">
+          {{ 'Deactivate' if source.is_active else 'Activate' }}
+        </button>
+        {% if source.kind.value.startswith('API_') %}
+        <button type="button"
+                hx-post="/inventory/sources/{{ source.id }}/sync"
+                hx-target="#test-result-{{ source.id }}"
+                hx-swap="innerHTML"
+                hx-indicator="#sync-indicator-{{ source.id }}"
+                style="margin-top:.4rem;margin-left:.5rem">Sync now</button>
+        <span id="sync-indicator-{{ source.id }}" class="htmx-indicator muted" style="margin-left:.4rem">Syncing&hellip;</span>
+        {% endif %}
+      </div>
+
+      {% if source.kind.value.startswith('CSV_') %}
+      <div class="detail-section">
+        <h3>Upload inventory CSV</h3>
+        <form hx-post="/inventory/sources/{{ source.id }}/csv/preview"
+              hx-target="#csv-preview-{{ source.id }}" hx-swap="outerHTML"
+              hx-encoding="multipart/form-data" class="status-form">
+          <input type="file" name="file" accept=".csv,text/csv" required>
+          <button type="submit">Preview</button>
+        </form>
+        <div id="csv-preview-{{ source.id }}"></div>
+      </div>
+      {% endif %}
+      {% endif %}
+    </div>
+  </div>
+</div>

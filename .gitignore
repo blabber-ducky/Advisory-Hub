@@ -1,0 +1,17 @@
+Advisory/
+*.msg
+*.eml
+data/
+.env
+__pycache__/
+*.pyc
+.venv/
+
+# Local scratch
+.env.dev
+.env.local
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/

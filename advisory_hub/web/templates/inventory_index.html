@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 style="font-size:1.3rem;margin:0 0 1rem">Inventory sources</h1>
+
+{% if form_error %}
+<p class="error" role="alert">{{ form_error }}</p>
+{% endif %}
+
+{% if can_manage %}
+<div class="card" style="margin-bottom:1.5rem">
+  <h3 style="margin-top:0">Add a source</h3>
+  <form class="status-form" hx-post="/inventory/sources" hx-target="body" hx-swap="none">
+    <label for="name">Name</label>
+    <input type="text" name="name" id="name" required>
+
+    <label for="kind">Kind</label>
+    <select name="kind" id="kind" onchange="ahToggleSourceFields(this)" required>
+      {% for k in kinds %}
+      <option value="{{ k.value }}">{{ k.value | replace('_', ' ') | title }}</option>
+      {% endfor %}
+    </select>
+
+    <div id="api-fields" style="display:none">
+      <label for="base_url">Base URL <span style="color:var(--muted);font-weight:normal">(https, must be on OUTBOUND_ALLOWLIST)</span></label>
+      <input type="text" name="base_url" id="base_url" placeholder="https://dc.example.com">
+
+      <label for="credential_auth_type">Credential type</label>
+      <select name="credential_auth_type" id="credential_auth_type" onchange="ahToggleCredentialFields(this)">
+        <option value="">No credential yet</option>
+        {% for a in auth_types %}
+        <option value="{{ a.value }}">{{ a.value | replace('_', ' ') | title }}</option>
+        {% endfor %}
+      </select>
+
+      <div id="cred-api-key" style="display:none">
+        <label for="api_key">API key</label>
+        <input type="password" name="api_key" id="api_key" autocomplete="off">
+      </div>
+      <div id="cred-oauth" style="display:none">
+        <label for="client_id">Client ID</label>
+        <input type="text" name="client_id" id="client_id" autocomplete="off">
+        <label for="client_secret">Client secret</label>
+        <input type="password" name="client_secret" id="client_secret" autocomplete="off">
+      </div>
+      <div id="cred-basic" style="display:none">
+        <label for="username">Username</label>
+        <input type="text" name="username" id="username" autocomplete="off">
+        <label for="password">Password</label>
+        <input type="password" name="password" id="password" autocomplete="off">
+      </div>
+
+      <label for="schedule_cron">Sync schedule <span style="color:var(--muted);font-weight:normal">(cron expression, optional — scheduled sync ships in Phase 2c)</span></label>
+      <input type="text" name="schedule_cron" id="schedule_cron" placeholder="0 */6 * * *">
+    </div>
+
+    <button type="submit">Create source</button>
+  </form>
+</div>
+{% endif %}
+
+{% if sources %}
+<table class="tracker">
+  <thead>
+    <tr><th>Name</th><th>Kind</th><th>Mode</th><th>Status</th><th>Last sync</th><th>Active</th></tr>
+  </thead>
+  <tbody>
+    {% for source in sources %}
+    <tr hx-get="/inventory/sources/{{ source.id }}/detail" hx-target="next tr.detail-row td" hx-swap="innerHTML" hx-trigger="click once" onclick="ahToggle(this)">
+      <td>{{ source.name }}</td>
+      <td>{{ source.kind.value | replace('_', ' ') | title }}</td>
+      <td><span class="badge badge-neutral">{{ source.mode.value | title }}</span></td>
+      <td>
+        {% if source.last_sync_status.value == 'OK' %}<span class="badge badge-good">OK</span>
+        {% elif source.last_sync_status.value == 'PARTIAL' %}<span class="badge badge-warning">Partial</span>
+        {% elif source.last_sync_status.value == 'ERROR' %}<span class="badge badge-critical">Error</span>
+        {% else %}<span class="badge badge-neutral">Never synced</span>{% endif %}
+      </td>
+      <td>{{ source.last_sync_at.strftime('%Y-%m-%d %H:%M UTC') if source.last_sync_at else '&mdash;' }}</td>
+      <td>{% if source.is_active %}<span class="badge badge-good">Active</span>{% else %}<span class="badge badge-neutral">Inactive</span>{% endif %}</td>
+    </tr>
+    <tr class="detail-row" style="display:none"><td colspan="6"></td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">No inventory sources configured yet.</p>
+{% endif %}
+
+<script>
+function ahToggle(row) {
+  var next = row.nextElementSibling;
+  var showing = next.style.display !== 'none';
+  next.style.display = showing ? 'none' : 'table-row';
+}
+function ahToggleSourceFields(select) {
+  var isApi = select.value.startsWith('API_');
+  document.getElementById('api-fields').style.display = isApi ? 'block' : 'none';
+}
+function ahToggleCredentialFields(select) {
+  var v = select.value;
+  document.getElementById('cred-api-key').style.display = v === 'API_KEY' ? 'block' : 'none';
+  document.getElementById('cred-oauth').style.display = v === 'OAUTH_CLIENT_CREDENTIALS' ? 'block' : 'none';
+  document.getElementById('cred-basic').style.display = v === 'BASIC' ? 'block' : 'none';
+}
+</script>
+{% endblock %}

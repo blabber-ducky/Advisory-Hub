@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+  <h1 style="font-size:1.3rem;margin:0">Tracker</h1>
+  {% if can_scan_inbox %}
+  <form hx-post="/inbox/scan" hx-target="body" hx-swap="none">
+    <button type="submit" hx-indicator="#inbox-scan-indicator">
+      Scan inbox now
+      <span id="inbox-scan-indicator" class="htmx-indicator">&hellip;</span>
+    </button>
+  </form>
+  {% endif %}
+</div>
+
+{% if inbox_scan_result %}
+<div class="notice">
+  Inbox scan complete: {{ inbox_scan_result.ingested }} ingested,
+  {{ inbox_scan_result.duplicates }} duplicate{{ '' if inbox_scan_result.duplicates == 1 else 's' }},
+  {% if inbox_scan_result.failed %}<span style="color:var(--danger)">{{ inbox_scan_result.failed }} failed</span>
+  {% else %}0 failed{% endif %}.
+</div>
+{% endif %}
+
+{% include "_dashboard.html" %}
+
+<form class="filter-bar" hx-get="/" hx-target="#tracker-body" hx-swap="outerHTML" hx-push-url="true">
+  <input type="search" name="q" placeholder="Search title, description, ref…" value="{{ filters.q or '' }}">
+
+  <select name="status">
+    <option value="">All statuses</option>
+    {% for s in statuses %}
+    <option value="{{ s.value }}" {{ 'selected' if s in filters.status else '' }}>{{ s.value | replace('_',' ') | title }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="type">
+    <option value="">All types</option>
+    {% for t in types %}
+    <option value="{{ t.value }}" {{ 'selected' if t in filters.type else '' }}>{{ t.value | replace('_',' ') | title }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="severity">
+    <option value="">All severities</option>
+    {% for sev in severities %}
+    <option value="{{ sev.value }}" {{ 'selected' if sev in filters.severity else '' }}>{{ sev.value | title }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="source_id">
+    <option value="">All sources</option>
+    {% for src in sources %}
+    <option value="{{ src.id }}" {{ 'selected' if filters.source_id == src.id else '' }}>{{ src.short_code }}</option>
+    {% endfor %}
+  </select>
+
+  {# Re-submits the whole filter form on change, so sorting and filtering
+     always travel together as one query rather than two round trips. #}
+  <select name="sort" title="Sort order" onchange="this.form.requestSubmit()">
+    {% for key, label in sort_options %}
+    <option value="{{ key }}" {{ 'selected' if key == sort else '' }}>{{ label }}</option>
+    {% endfor %}
+  </select>
+
+  <button type="submit">Filter</button>
+  {% if not filters.is_empty() or sort != default_sort %}<a class="clear-link" href="/">Clear</a>{% endif %}
+</form>
+
+{% include "_tracker_table.html" %}
+{% endblock %}
