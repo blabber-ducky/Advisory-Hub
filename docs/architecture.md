@@ -155,6 +155,45 @@ Both are computed by `LEFT JOIN`ing a `GROUP BY advisory_id` aggregate over
 Unknown sort keys fall back to the default (`normalise_sort()`); the key never
 reaches SQL as anything but a lookup into a fixed table.
 
+#### 3.3.2 Theme and colour
+
+The UI follows **Mediclinic's colour language**, taken from the stylesheet
+of mediclinic.ae (D-036), in a light and a dark theme.
+
+| Token | Light | Dark | Used for |
+|---|---|---|---|
+| `--bg` | `#F7F6F5` stone | `#0B1733` deep navy | Page background |
+| `--surface` | `#FFFFFF` | `#112046` | Cards, header, tables |
+| `--border` | `#E2DFDB` | `#22335E` | Rules, input borders |
+| `--ink` | `#534C46` warm grey | `#F0EFED` | Body text |
+| `--heading` | `#0A235E` navy | `#FFFFFF` | Headings, brand wordmark, active tab |
+| `--muted` | `#72665B` | `#B6ADA5` | Secondary text, labels |
+| `--brand` | `#0094D4` | `#0094D4` | **Non-text only**: header rule, active-tab underline, focus ring, hover borders |
+| `--accent` | `#0072A3` | `#4FB8E6` | Links |
+| `--button` / `--on-button` | `#0072A3` / white | `#0094D4` / navy | Primary buttons (hover `#003F72` / `#33A9DD`) |
+| `--danger` | `#DF131B` Mediclinic red | `#FF6B70` | Error banners |
+
+Mediclinic's signature blue `#0094D4` is only **3.4:1** against white, below
+WCAG AA for text — which is why it is reserved for non-text accents, and
+links/buttons use Mediclinic's own darker `#0072A3` (5.3:1). Every text
+pairing in both themes is ≥ 4.5:1.
+
+The **status palette** (good/warning/serious/critical/neutral badges) is
+deliberately *not* brand-coloured: it is the dataviz skill's validated
+semantic set, and making "critical" a Mediclinic blue would erase its
+meaning. Only the dark-mode *neutral* badge was retuned (`#B6ADA5` on
+`#1D2C52`) so it reads against the navy surface; the rest are unchanged.
+
+Font stack is `Metropolis, Arial, …` — Mediclinic's typeface if installed on
+the client, Arial otherwise. It is not bundled or loaded from a CDN.
+
+**Switching**: each token is a CSS `light-dark(<light>, <dark>)` pair, so by
+default the theme follows the operating system. The toggle in the header
+(and top-right of the sign-in page) cycles **System → Light → Dark** and
+stores the choice in the browser's `localStorage` (`ah-theme`) — per
+browser, nothing server-side. A pinned choice is applied by a small inline
+script in `<head>` before first paint, so there is no light-to-dark flash.
+
 ### 3.4 `api/` — REST
 
 `/api/v1`, OpenAPI 3.1 auto-generated at `/api/docs`. Session cookie for the UI,

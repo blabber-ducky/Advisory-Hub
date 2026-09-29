@@ -31,7 +31,7 @@
         <td>{{ m.sla_badge(advisory.ack_due_at, advisory.acknowledged_at is not none, now) }}</td>
         <td class="last-comment">
           {%- set c = last_comments.get(advisory.id) -%}
-          {%- if c -%}{{ c.body[:90] }}{%- else -%}<span style="color:var(--border)">No comments yet</span>{%- endif -%}
+          {%- if c -%}{{ c.body[:90] }}{%- else -%}<span style="font-style:italic">No comments yet</span>{%- endif -%}
         </td>
       </tr>
       {% endfor %}

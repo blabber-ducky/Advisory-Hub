@@ -124,6 +124,21 @@ docker/
 
 Newest first. Update this when work lands.
 
+### 2026-09-29 — Mediclinic light/dark theme
+- **On request** ("dark and light theme according to Mediclinic design and
+  colour language"): palette read from mediclinic.ae's own stylesheet, not
+  approximated. Brand blue `#0094D4` fails AA as text (3.4:1), so it
+  carries non-text accents only; links/buttons use Mediclinic's `#0072A3`.
+  Dark theme is navy-based. Tokens are CSS `light-dark()` pairs — follows
+  the OS by default; a header toggle (also on the sign-in page) pins
+  System/Light/Dark per browser. Status/severity badges stay semantic, not
+  branded. docs/architecture.md §3.3.2, D-036.
+- **Fixed while verifying**: the tracker's "No comments yet" placeholder
+  used the border colour as text (~1.3:1, effectively invisible).
+- **Verified**: 590 tests passing. Real tracker/IOC/detail/sign-in pages
+  rendered against the dev corpus in headless Chromium in both themes.
+  `ah-test` no longer exists on disk, so it was not redeployed.
+
 ### 2026-09-29 — HTTPS deployment option
 - **On request** ("HTTPS option … don't generate any certificates now …
   create a script I can use during deployment"): new overlay

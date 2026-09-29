@@ -843,6 +843,48 @@ certificate installed) and the `.env` edit helpers were exercised against a
 scratch `.env`. **Not yet exercised: a real TLS handshake** — it needs a
 certificate, which was deliberately not created.
 
+## D-036 — UI themed to Mediclinic's colour language, light and dark, via CSS `light-dark()`
+
+**Date:** 2026-09-29 · **Status:** Accepted
+
+**Requested**: a dark and a light theme following Mediclinic's design and
+colour language from their website.
+
+**Decision**: colours were read directly from mediclinic.ae's production
+stylesheet (by frequency and by what they are applied to), not
+approximated: `#0094D4` (links/brand, 211 uses), `#534C46` (body and heading
+text), `#0A235E` / `#003F72` (navy / hover blue), `#72665B` (nav, placeholders),
+and the stone neutrals `#F7F6F5`, `#E2DFDB`, `#D0CAC6`; font `Metropolis,
+Arial`. Token table in docs/architecture.md §3.3.2.
+
+- **`#0094D4` is not used for text.** At 3.4:1 on white it fails WCAG AA;
+  Mediclinic's own darker `#0072A3` (5.3:1, also in their stylesheet) takes
+  links and buttons. `#0094D4` keeps the brand identity on non-text
+  accents.
+- **Dark theme is navy-based**, derived from `#0A235E`, rather than
+  neutral grey — it keeps the brand recognisable and suits a SOC screen.
+  Buttons flip to `#0094D4` with navy text (5.2:1), since white on it fails.
+- **Status colours stay semantic**, not branded (see §3.3.2).
+- **Sub-brand colours** in the same stylesheet (ER24 reds `#DF131B` /
+  `#ED3237`, MHR lime `#BED747`, magenta `#E61772`) were not adopted as
+  theme colours; `#DF131B` is used only for error banners, where red is
+  expected anyway (4.95:1 on white).
+- **`light-dark()` + `color-scheme`** over duplicated `@media` and
+  `[data-theme]` blocks: one value per token, OS preference respected with
+  no JavaScript, and native controls/scrollbars follow the theme. The
+  header toggle only sets `data-theme` on `<html>`. Supported in every
+  current evergreen browser (2024+); an older browser would ignore the
+  declarations and fall back to its defaults.
+- Metropolis is not bundled or loaded from a CDN (no new outbound
+  dependency); clients without it get Arial, as mediclinic.ae itself falls
+  back to.
+
+**Verified**: rendered the real tracker, IOC tab, an advisory detail page
+and the sign-in page against the dev corpus in headless Chromium in both
+themes. One pre-existing contrast defect surfaced and was fixed — the
+tracker's "No comments yet" placeholder was styled with the *border* colour
+(≈1.3:1, unreadable); it now uses the inherited muted text colour.
+
 ---
 
 ## Open decisions

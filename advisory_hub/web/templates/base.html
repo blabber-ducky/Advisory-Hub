@@ -5,54 +5,74 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ title }} · Advisory Hub</title>
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script>
+    // Apply a pinned theme before first paint so there's no flash. Unset
+    // means "follow the OS" (color-scheme: light dark in the CSS).
+    (function () {
+      var t = localStorage.getItem("ah-theme");
+      if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+    })();
+  </script>
   <style>
+    /* ─── Theme — Mediclinic colour language ───────────────────────────
+       Palette taken from mediclinic.ae's own stylesheet: brand blue
+       #0094D4, hover blue #003F72, navy #0A235E, warm-grey body text
+       #534C46 and the stone neutrals (#F7F6F5, #E2DFDB, #D0CAC6).
+       #0094D4 is only 3.4:1 on white, so it carries non-text accents
+       (tab underline, focus ring, header rule); text links and buttons
+       use the darker #0072A3 (5.3:1). Every text pairing below is >= 4.5:1.
+
+       Each token is light-dark(<light>, <dark>). The theme follows the OS
+       by default; the header toggle pins it by setting data-theme on
+       <html>, which just changes color-scheme. See docs/architecture.md
+       §3.3.2 and D-036. */
     :root {
-      --bg: #f7f7f5; --surface: #fff; --border: #e3e2de; --ink: #1c1b19;
-      --muted: #6b6a66; --accent: #7c5a3c; --danger: #a8332b;
+      color-scheme: light dark;
+      --bg:          light-dark(#f7f6f5, #0b1733);
+      --surface:     light-dark(#ffffff, #112046);
+      --border:      light-dark(#e2dfdb, #22335e);
+      --ink:         light-dark(#534c46, #f0efed);
+      --heading:     light-dark(#0a235e, #ffffff);
+      --muted:       light-dark(#72665b, #b6ada5);
+      --brand:       #0094d4;
+      --accent:      light-dark(#0072a3, #4fb8e6);
+      --accent-hover:light-dark(#003f72, #8fd2f0);
+      --button:      light-dark(#0072a3, #0094d4);
+      --button-hover:light-dark(#003f72, #33a9dd);
+      --on-button:   light-dark(#ffffff, #0b1733);
+      --danger:      light-dark(#df131b, #ff6b70);
 
-      /* Status palette (dataviz skill) — fixed, never themed, never reused
-         for series identity. Always paired with an icon/label, never color
-         alone, per the skill's contrast findings on the light surface. */
-      --status-good: #0ca30c;
-      --status-good-bg: #e8f7e8;
-      --status-warning: #b5790f;
-      --status-warning-bg: #fdf1da;
-      --status-serious: #c15a37;
-      --status-serious-bg: #fbe9e1;
-      --status-critical: #d03b3b;
-      --status-critical-bg: #fbe4e4;
-      --status-neutral: #6b6a66;
-      --status-neutral-bg: #eeede9;
+      /* Status palette (dataviz skill) — semantic, not brand: never reused
+         for series identity, always paired with an icon/label, never color
+         alone. Kept distinct from the brand blues on purpose. */
+      --status-good:        light-dark(#0ca30c, #35c235);
+      --status-good-bg:     light-dark(#e8f7e8, #123214);
+      --status-warning:     light-dark(#b5790f, #fab219);
+      --status-warning-bg:  light-dark(#fdf1da, #3a2c0c);
+      --status-serious:     light-dark(#c15a37, #ec835a);
+      --status-serious-bg:  light-dark(#fbe9e1, #3a2015);
+      --status-critical:    light-dark(#d03b3b, #e66767);
+      --status-critical-bg: light-dark(#fbe4e4, #3a1616);
+      --status-neutral:     light-dark(#6b6a66, #b6ada5);
+      --status-neutral-bg:  light-dark(#eeede9, #1d2c52);
     }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #17171a; --surface: #202024; --border: #33333a; --ink: #eceae5;
-        --muted: #9d9b95; --accent: #c99a6b; --danger: #e0736a;
-
-        --status-good: #35c235;
-        --status-good-bg: #123214;
-        --status-warning: #fab219;
-        --status-warning-bg: #3a2c0c;
-        --status-serious: #ec835a;
-        --status-serious-bg: #3a2015;
-        --status-critical: #e66767;
-        --status-critical-bg: #3a1616;
-        --status-neutral: #9d9b95;
-        --status-neutral-bg: #2a2a2c;
-      }
-    }
+    :root[data-theme="light"] { color-scheme: light; }
+    :root[data-theme="dark"]  { color-scheme: dark; }
     * { box-sizing: border-box; }
     body {
       margin: 0; min-height: 100%; background: var(--bg); color: var(--ink);
-      font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+      font: 15px/1.55 Metropolis, Arial, ui-sans-serif, system-ui, sans-serif;
     }
     header {
       display: flex; align-items: center; justify-content: space-between;
       padding: .75rem 1.25rem; border-bottom: 1px solid var(--border);
-      background: var(--surface);
+      background: var(--surface); border-top: 3px solid var(--brand);
     }
-    header .brand { font-weight: 650; letter-spacing: -.01em; }
-    header .brand span { color: var(--accent); }
+    header .brand { font-weight: 700; letter-spacing: -.01em; color: var(--heading); }
+    header .brand span { color: var(--brand); }
+    h1, h2, h3 { color: var(--heading); }
+    a { color: var(--accent); }
+    a:hover { color: var(--accent-hover); }
     header .left { display: flex; align-items: center; gap: 1.5rem; }
     nav.tabs { display: flex; gap: 1.1rem; }
     nav.tabs a {
@@ -60,7 +80,7 @@
       padding: .2rem 0; border-bottom: 2px solid transparent;
     }
     nav.tabs a:hover { color: var(--ink); }
-    nav.tabs a.active { color: var(--ink); border-bottom-color: var(--accent); }
+    nav.tabs a.active { color: var(--heading); border-bottom-color: var(--brand); }
     main { max-width: 1180px; margin: 0 auto; padding: 1.75rem 1.25rem; }
     .card {
       background: var(--surface); border: 1px solid var(--border);
@@ -72,20 +92,24 @@
       width: 100%; padding: .55rem .7rem; border: 1px solid var(--border);
       border-radius: 7px; background: var(--bg); color: var(--ink); font-size: .95rem;
     }
-    input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+    input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
+    button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
     button {
-      background: var(--accent); color: #fff; border: 0; border-radius: 7px;
+      background: var(--button); color: var(--on-button); border: 0; border-radius: 7px;
       padding: .55rem 1rem; font-size: .95rem; font-weight: 550; cursor: pointer;
     }
-    button:hover { filter: brightness(1.08); }
+    button:hover { background: var(--button-hover); }
     button.link { background: none; color: var(--muted); padding: 0; font-weight: 400; }
+    button.link:hover { background: none; color: var(--ink); }
+    .theme-toggle { display: inline-flex; align-items: center; gap: .3rem; font-size: .85rem; }
+    .theme-float { position: absolute; top: .9rem; right: 1.25rem; }
     .error {
       background: color-mix(in srgb, var(--danger) 12%, transparent);
       border: 1px solid var(--danger); color: var(--danger);
       padding: .6rem .8rem; border-radius: 7px; font-size: .9rem; margin-bottom: 1rem;
     }
     .notice {
-      border-left: 3px solid var(--accent); padding: .5rem 0 .5rem .9rem;
+      border-left: 3px solid var(--brand); padding: .5rem 0 .5rem .9rem;
       margin: 1rem 0; color: var(--muted); font-size: .92rem;
     }
     code { font: .86em ui-monospace, "SF Mono", Menlo, monospace;
@@ -101,7 +125,7 @@
       padding: .9rem 1rem; display: flex; flex-direction: column; gap: .3rem;
       text-decoration: none; color: inherit; transition: border-color .12s;
     }
-    a.stat-tile:hover { border-color: var(--accent); }
+    a.stat-tile:hover { border-color: var(--brand); }
     .stat-tile .value { font-size: 1.7rem; font-weight: 650; line-height: 1; letter-spacing: -.02em; }
     .stat-tile .label { font-size: .8rem; color: var(--muted); }
     .stat-tile.tone-critical .value { color: var(--status-critical); }
@@ -148,7 +172,7 @@
     }
     table.tracker td { padding: .55rem .6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
     table.tracker tbody tr { cursor: pointer; }
-    table.tracker tbody tr:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+    table.tracker tbody tr:hover td { background: color-mix(in srgb, var(--brand) 7%, transparent); }
     .col-title { max-width: 26rem; }
     .col-title .ref {
       font-family: ui-monospace, monospace; font-size: .78rem; color: var(--muted);
@@ -223,6 +247,12 @@
   </style>
 </head>
 <body>
+{% macro theme_toggle() -%}
+<button type="button" class="link theme-toggle" data-theme-toggle aria-label="Change colour theme">
+  <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"/></svg>
+  <span>System</span>
+</button>
+{%- endmacro %}
 {% if principal %}
 <header>
   <div class="left">
@@ -238,13 +268,40 @@
     </nav>
   </div>
   <div class="muted" style="display:flex;gap:1rem;align-items:center">
+    {{ theme_toggle() }}
     <span>{{ principal.display }} · {{ principal.role }}</span>
     <form method="post" action="/logout" style="margin:0">
       <button class="link" type="submit">Sign out</button>
     </form>
   </div>
 </header>
+{% else %}
+<div class="theme-float">{{ theme_toggle() }}</div>
 {% endif %}
 <main>{% block content %}{% endblock %}</main>
+<script>
+  // System → Light → Dark → System. Stored per browser; nothing server-side.
+  (function () {
+    var order = ["system", "light", "dark"];
+    var labels = { system: "System", light: "Light", dark: "Dark" };
+    var root = document.documentElement;
+    function current() { return root.dataset.theme || "system"; }
+    function render() {
+      document.querySelectorAll("[data-theme-toggle]").forEach(function (b) {
+        b.querySelector("span").textContent = labels[current()];
+        b.title = "Theme: " + labels[current()] + " — click to change";
+      });
+    }
+    document.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-theme-toggle]");
+      if (!b) return;
+      var next = order[(order.indexOf(current()) + 1) % order.length];
+      if (next === "system") { delete root.dataset.theme; localStorage.removeItem("ah-theme"); }
+      else { root.dataset.theme = next; localStorage.setItem("ah-theme", next); }
+      render();
+    });
+    render();
+  })();
+</script>
 </body>
 </html>
