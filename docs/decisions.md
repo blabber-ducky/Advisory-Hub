@@ -967,6 +967,34 @@ containers, so `VT_API_KEY`, `PDF_*`, `CSV_*`, the poll intervals and
 `FERNET_KEY_PREVIOUS` in `.env` had no effect under Compose. Fixed with the
 same `env_file` approach.
 
+## D-039 — SQLAlchemy pinned below 2.1; mypy stub packages are declared dependencies
+
+**Date:** 2026-09-29 · **Status:** Accepted
+
+**What happened**: the first CI run failed `mypy --strict` with 17 errors
+that never appeared locally. Reproduced exactly in a clean `python:3.13`
+container doing CI's `pip install -e ".[dev]"`:
+
+| Cause | Effect |
+|---|---|
+| `sqlalchemy>=2.0.36` had no upper bound; a fresh install now resolves **2.1.1** (local venv: 2.0.52) | 2.1 changed how `Select`/`Row` are typed — 16 errors in `core/services/advisories.py` and `iocs.py` |
+| `types-defusedxml` was installed in the local venv by hand but never declared | `import-untyped` on `ingest/sidecars.py` |
+
+**Decision**: `sqlalchemy>=2.0.36,<2.1`, and `types-defusedxml` added to the
+`dev` extra. Same clean-container run afterwards: SQLAlchemy 2.0.54,
+`mypy` clean; 594 tests pass.
+
+**Why pin rather than port to 2.1 now**: the production image installs from
+the same `pyproject.toml`, so the unbounded range meant any freshly built
+image was *running* on a SQLAlchemy minor the code had never been tested
+against — not only failing lint. Moving to 2.1 is worth doing, as its own
+change with the typing fixes and a full test run, not as a side effect of
+whenever an image happens to be built.
+
+**Still open**: there's no lock file, so every other dependency floats the
+same way. A lock (`uv lock` / `pip-compile`) used by CI and the Dockerfile
+would make builds reproducible; not done here.
+
 ---
 
 ## Open decisions

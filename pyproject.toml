@@ -6,7 +6,10 @@ requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
-    "sqlalchemy>=2.0.36",
+    # <2.1: 2.1 changed the typing of Select/Row (mypy fails on it) and is a
+    # new minor with behaviour changes. Upgrading is a deliberate, tested
+    # change, not something a fresh `pip install` should do on its own.
+    "sqlalchemy>=2.0.36,<2.1",
     "alembic>=1.14",
     "psycopg[binary]>=3.2",
     "pydantic>=2.10",
@@ -39,6 +42,9 @@ dev = [
     "pytest-asyncio>=0.25",
     "ruff>=0.8",
     "mypy>=1.13",
+    # Stubs for the mypy --strict run; otherwise only present if someone
+    # happened to install them locally, which is how CI came to lack them.
+    "types-defusedxml>=0.7",
 ]
 
 [project.scripts]

@@ -130,6 +130,21 @@ docker-compose.prod.yml      # production, self-contained — see docs/deploymen
 
 Newest first. Update this when work lands.
 
+### 2026-09-29 — CI mypy failure: SQLAlchemy 2.1 pulled in by an unbounded range
+- First CI run failed `mypy` with 17 errors not seen locally. Reproduced in a
+  clean `python:3.13` container: fresh installs resolve SQLAlchemy **2.1.1**
+  (local had 2.0.52), whose new `Select`/`Row` typing breaks
+  `core/services/advisories.py` and `iocs.py`; and `types-defusedxml` was
+  only ever installed locally by hand.
+- Fixed: `sqlalchemy>=2.0.36,<2.1`; `types-defusedxml` in the `dev` extra.
+  Images built from the unbounded range were also running untested on 2.1 —
+  the pin covers them too. Porting to 2.1 left as a deliberate follow-up.
+  D-039.
+- **Verified**: clean-container `mypy` clean (SQLAlchemy 2.0.54); 594 tests
+  pass locally; `ruff` clean.
+- **Next**: a lock file for CI and the Dockerfile — every other dependency
+  still floats the same way.
+
 ### 2026-09-29 — Production compose file; worker pollers no longer die at start-up
 - **On request**: `docker-compose.prod.yml` — self-contained production
   stack. HTTPS-only proxy as the sole published service; Postgres/Redis on
