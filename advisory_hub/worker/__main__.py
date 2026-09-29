@@ -52,6 +52,7 @@ def main() -> int:
         poll_seconds=settings.inbox_poll_seconds,
     )
 
+    _preload_poller_dependencies()
     _start_inbox_poller()
     _start_enrichment_poller()
     _start_inventory_sync_poller()
@@ -59,6 +60,24 @@ def main() -> int:
     worker = Worker(queues, connection=connection)
     worker.work(with_scheduler=True)
     return 0
+
+
+def _preload_poller_dependencies() -> None:
+    """Import everything the poller threads use, once, on the main thread.
+
+    The pollers start together; when each thread did the *first* import of
+    ``core.models`` itself, the imports raced ("cannot import name ... from
+    partially initialized module") and the inbox and inventory-sync threads
+    died at start-up while the worker kept reporting healthy. After this,
+    the imports inside each ``_loop`` are just cache lookups.
+    """
+    import croniter  # noqa: F401
+
+    from ..core.models import base, enums  # noqa: F401
+    from ..core.services import audit, enrichment, inventory  # noqa: F401
+    from ..db import session_scope  # noqa: F401
+    from ..ingest import pipeline  # noqa: F401
+    from ..inventory import api_client  # noqa: F401
 
 
 def _start_inbox_poller() -> None:
@@ -73,10 +92,12 @@ def _start_inbox_poller() -> None:
     import time
 
     def _loop() -> None:
-        from ..ingest.pipeline import process_inbox
-
         while True:
             try:
+                # Inside the try: a failed import is logged and retried
+                # next cycle instead of silently ending the thread.
+                from ..ingest.pipeline import process_inbox
+
                 process_inbox()
             except Exception:
                 log.exception("inbox.poll_failed")
@@ -98,11 +119,11 @@ def _start_enrichment_poller() -> None:
     import time
 
     def _loop() -> None:
-        from ..core.services.enrichment import enrich_pending
-        from ..db import session_scope
-
         while True:
             try:
+                from ..core.services.enrichment import enrich_pending
+                from ..db import session_scope
+
                 # No `settings.nvd_enabled` gate here — `enrich_pending()`
                 # resolves enabled/disabled itself via
                 # `core.services.system_integrations`, which may have been
@@ -138,17 +159,17 @@ def _start_inventory_sync_poller() -> None:
     import time
 
     def _loop() -> None:
-        from croniter import croniter
-
-        from ..core.models.base import utcnow
-        from ..core.models.enums import ActorKind
-        from ..core.services import inventory as inv_svc
-        from ..core.services.audit import Actor
-        from ..db import session_scope
-        from ..inventory.api_client import ApiAdapterError
-
         while True:
             try:
+                from croniter import croniter
+
+                from ..core.models.base import utcnow
+                from ..core.models.enums import ActorKind
+                from ..core.services import inventory as inv_svc
+                from ..core.services.audit import Actor
+                from ..db import session_scope
+                from ..inventory.api_client import ApiAdapterError
+
                 with session_scope() as db:
                     due_source_ids = []
                     for source in inv_svc.list_sources(db, active_only=True):
