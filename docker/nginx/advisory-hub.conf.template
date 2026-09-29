@@ -1,10 +1,12 @@
 # TLS-terminating reverse proxy for Advisory Hub.
 #
-# Rendered at container start by the nginx image's envsubst step
+# Baked into the advisory-hub-proxy image (docker/nginx/Dockerfile) and
+# rendered at container start by the nginx image's envsubst step
 # (/etc/nginx/templates/*.template → /etc/nginx/conf.d/*.conf). Only the
 # ${SERVER_NAME} and ${HSTS_MAX_AGE} variables below are substituted —
-# NGINX_ENVSUBST_FILTER in docker-compose.https.yml restricts it, so nginx's
-# own $host/$remote_addr/etc. are left alone.
+# NGINX_ENVSUBST_FILTER in the Dockerfile restricts it, so nginx's own
+# $host/$remote_addr/etc. are left alone. Editing this file means
+# rebuilding the proxy image.
 #
 # Certificates are NOT generated or stored in the repo. They are installed
 # into TLS_CERT_DIR on the host by scripts/https-setup.sh and mounted

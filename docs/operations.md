@@ -21,12 +21,20 @@ the app refuses to start in production if it is still a placeholder. Both
 failures are deliberate: the alternative is issuing forgeable session cookies.
 
 `docker-compose.override.yml` is picked up automatically and adds development
-conveniences: published Postgres/Redis ports, live reload, console logging,
-non-secure cookies. **For a production-shaped run, bypass it:**
+conveniences: **builds the image from your working tree**, published
+Postgres/Redis ports, live reload, console logging, non-secure cookies.
+
+**Production pulls published images from Docker Hub instead of building**
+(§8). Set `IMAGE_NAMESPACE` (and ideally pin `IMAGE_TAG`) in `.env`, then
+bypass the override:
 
 ```bash
+docker compose -f docker-compose.yml pull
 docker compose -f docker-compose.yml up -d
 ```
+
+A production host needs only the compose files, `.env`, and (for HTTPS)
+`scripts/https-setup.sh` plus its certificates — not the source tree.
 
 `APP_PORT` (default `8080`), `POSTGRES_PORT`, and `REDIS_PORT` are overridable
 when a port is already taken.
@@ -49,10 +57,10 @@ repo or the image.
 
 | Service | Image | Role |
 |---|---|---|
-| `app` | built from `docker/Dockerfile` | FastAPI: UI, REST API, MCP HTTP transport |
+| `app` | `<IMAGE_NAMESPACE>/advisory-hub` (`docker/Dockerfile`) | FastAPI: UI, REST API, MCP HTTP transport |
 | `worker` | same image, different command | RQ worker: ingestion, enrichment, inventory sync, scans |
 | `scheduler` | same image | RQ scheduler for cron-style inventory syncs (Phase 2) |
-| `proxy` | `nginx:1.27-alpine` | **HTTPS overlay only** (`docker-compose.https.yml`): terminates TLS, redirects HTTP → HTTPS, proxies to `app`. See §7. |
+| `proxy` | `<IMAGE_NAMESPACE>/advisory-hub-proxy` (`docker/nginx/Dockerfile`) | **HTTPS overlay only** (`docker-compose.https.yml`): nginx with the site config baked in; terminates TLS, redirects HTTP → HTTPS, proxies to `app`. See §7. |
 | `postgres` | `postgres:16-alpine` | System of record |
 | `redis` | `redis:7-alpine` | Job queue, NVD cache, rate limiting |
 
@@ -107,6 +115,8 @@ Every variable belongs in `.env.example` with a dummy value and a comment.
 | `CSV_MAX_BYTES` | no | Default `20971520` (20 MB) — inventory CSV upload size cap |
 | `CSV_MAX_ROWS` | no | Default `200000` — inventory CSV row cap, enforced while parsing |
 | `INVENTORY_SYNC_POLL_SECONDS` | no | Default `300` — how often the worker checks active API sources for a due `schedule_cron` |
+| `IMAGE_NAMESPACE` | yes (production) | **Compose-level.** Docker Hub user/org the images are pulled from, e.g. `acme` → `acme/advisory-hub`. Unset → `localhost/…`: only locally built images work, and a pull fails loudly rather than fetching from someone else's namespace. See §8. |
+| `IMAGE_TAG` | recommended | **Compose-level.** Image tag for `app`/`worker`/`proxy`. Default `latest`; pin a release (`1.4.0`) or commit (`sha-1a2b3c4`) in production. |
 | `SESSION_COOKIE_SECURE` | no | Default `true`; `false` only for local HTTP dev. The HTTPS overlay forces `true`. |
 | `COMPOSE_FILE` | HTTPS only | **Compose-level.** `docker-compose.yml:docker-compose.https.yml` — written by `scripts/https-setup.sh` so plain `docker compose …` uses the HTTPS overlay. Also stops `docker-compose.override.yml` being applied, which is what you want in production. |
 | `SERVER_NAME` | HTTPS only | **Compose-level.** Hostname users browse to; must be in the certificate's subjectAltName. |
@@ -350,3 +360,67 @@ and delete the `HSTS_MAX_AGE=0` line from `.env`.
 | Browser: "incomplete chain" on some clients only | `server.crt` lacks the intermediate — re-run `install` with `--chain` |
 | Audit log shows the proxy's IP for every user | `app` started without the overlay's `FORWARDED_ALLOW_IPS` — check `docker compose config` includes `docker-compose.https.yml` |
 | Port 80/443 already in use | Set `HTTP_PORT` / `HTTPS_PORT` in `.env` |
+
+## 8. Images and publishing
+
+CI (`.github/workflows/ci.yml`, job `images`) builds and publishes two
+images to Docker Hub. Compose pulls them; only development builds locally.
+
+| Image | Dockerfile | Runs as |
+|---|---|---|
+| `<namespace>/advisory-hub` | `docker/Dockerfile` | `app` **and** `worker` — same code, different command, so one image |
+| `<namespace>/advisory-hub-proxy` | `docker/nginx/Dockerfile` | `proxy` (HTTPS overlay) — `nginx:1.27-alpine` + `docker/nginx/advisory-hub.conf.template`. Certificates are never in the image. |
+
+Both are multi-arch (`linux/amd64`, `linux/arm64`) and carry an SBOM and
+build provenance attestation.
+
+### 8.1 When CI publishes, and which tags
+
+Publishing happens only after `lint` and `test` pass.
+
+| Trigger | Pushed? | Tags |
+|---|---|---|
+| Pull request | **No** — built only, to prove it still builds | `pr-<n>` (not pushed) |
+| Push to `main` | Yes | `latest`, `main`, `sha-<7-char commit>` |
+| Push tag `v1.4.0` | Yes | `1.4.0`, `1.4`, `sha-<commit>` |
+
+To cut a release: `git tag v1.4.0 && git push origin v1.4.0`.
+
+### 8.2 One-time setup (GitHub → Settings → Secrets and variables → Actions)
+
+| Name | Kind | Value |
+|---|---|---|
+| `DOCKERHUB_USERNAME` | Secret | Docker Hub account CI logs in as |
+| `DOCKERHUB_TOKEN` | Secret | A Docker Hub **access token** with *Read & Write* scope (Account settings → Personal access tokens) — not the account password |
+| `DOCKERHUB_NAMESPACE` | Variable (optional) | Org to publish under, if not the username. Recommended even when it's the same: a value taken from a secret is masked as `***` in CI logs |
+
+A push to `main` without the two secrets fails the job with a message
+pointing here, rather than silently skipping the publish. The repositories
+are created on first push; **set them to private on Docker Hub** if the
+images shouldn't be public — the image contains the full application code.
+
+### 8.3 Deploying and upgrading a host
+
+```bash
+# .env on the host
+IMAGE_NAMESPACE=acme
+IMAGE_TAG=1.4.0          # pin; avoid `latest` in production
+
+docker login                         # only if the repositories are private
+docker compose pull                  # add -f docker-compose.yml unless COMPOSE_FILE is set
+docker compose up -d
+docker compose exec app alembic upgrade head
+```
+
+**Rollback**: set `IMAGE_TAG` back to the previous tag and `docker compose up
+-d`. If the newer release ran a migration, downgrade it first with the
+*newer* image (`docker compose exec app alembic downgrade <rev>`) — the older
+image doesn't know the newer revision.
+
+### 8.4 Building locally
+
+`make images` builds both under the names compose expects
+(`${IMAGE_NAMESPACE:-localhost}/…:${IMAGE_TAG:-latest}`) — useful for
+trying the HTTPS overlay on a machine without pulling. Development
+(`docker compose up` with the override) builds `app`/`worker` itself and
+never pulls them.

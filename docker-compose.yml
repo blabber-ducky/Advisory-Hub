@@ -18,10 +18,19 @@ x-app-env: &app-env
   FERNET_KEY: ${FERNET_KEY:-}
   OUTBOUND_ALLOWLIST: ${OUTBOUND_ALLOWLIST:-}
 
-x-app-build: &app-build
-  build:
-    context: .
-    dockerfile: docker/Dockerfile
+# app and worker run the same image (different command), pulled from
+# Docker Hub. Built and pushed by CI (.github/workflows/ci.yml).
+#
+#   IMAGE_NAMESPACE  Docker Hub user/org the images are published under.
+#                    Unset → "localhost/…", which only exists if built on
+#                    this machine; a pull then fails loudly rather than
+#                    fetching an image from someone else's namespace.
+#   IMAGE_TAG        Pin to a release (e.g. 1.4.0) or sha-<commit> in
+#                    production. Default: latest.
+#
+# docker-compose.override.yml (development) builds locally instead.
+x-app-image: &app-image
+  image: ${IMAGE_NAMESPACE:-localhost}/advisory-hub:${IMAGE_TAG:-latest}
 
 services:
   postgres:
@@ -52,7 +61,7 @@ services:
     restart: unless-stopped
 
   app:
-    <<: *app-build
+    <<: *app-image
     environment: *app-env
     ports:
       - "${APP_PORT:-8080}:8000"
@@ -73,7 +82,7 @@ services:
     restart: unless-stopped
 
   worker:
-    <<: *app-build
+    <<: *app-image
     environment: *app-env
     command: ["python", "-m", "advisory_hub.worker"]
     volumes:

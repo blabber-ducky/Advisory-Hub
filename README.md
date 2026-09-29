@@ -65,8 +65,14 @@ open http://localhost:8080
 ```
 
 `docker-compose.override.yml` is applied automatically and adds development
-conveniences (published database port, live reload, console logs). For a
-production-shaped run, use `docker compose -f docker-compose.yml up -d`.
+conveniences (builds from the working tree, published database port, live
+reload, console logs).
+
+Production doesn't build: CI publishes `advisory-hub` and
+`advisory-hub-proxy` to Docker Hub, and compose pulls them. Set
+`IMAGE_NAMESPACE` (and pin `IMAGE_TAG`) in `.env`, then
+`docker compose -f docker-compose.yml pull && docker compose -f docker-compose.yml up -d`
+— see [docs/operations.md §8](docs/operations.md#8-images-and-publishing).
 
 For a real deployment, serve it over **HTTPS**: install your certificate with
 `scripts/https-setup.sh install …` and restart — see

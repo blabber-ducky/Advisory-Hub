@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
 
 concurrency:
@@ -84,16 +85,80 @@ jobs:
           fi
           rm -f migrations/versions/drift_drift_check.py
 
-  docker:
-    name: Docker image builds
+  images:
+    name: Image — ${{ matrix.image }}
+    # Pull requests build both images to prove they still build, but never
+    # push (and fork PRs have no secrets anyway). Pushes to main and v* tags
+    # publish, and only after lint + tests pass.
+    needs: [lint, test]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # app + worker: same image, different command (docker-compose.yml).
+          - image: advisory-hub
+            dockerfile: docker/Dockerfile
+          # TLS proxy for the HTTPS overlay, site config baked in.
+          - image: advisory-hub-proxy
+            dockerfile: docker/nginx/Dockerfile
+    env:
+      PUSH: ${{ github.event_name == 'push' }}
+      # Docker Hub user/org to publish under. Set the repository variable
+      # DOCKERHUB_NAMESPACE for an org; otherwise the login username is used.
+      NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_USERNAME || 'localhost' }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check Docker Hub is configured
+        if: env.PUSH == 'true'
+        env:
+          HAS_USER: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+          HAS_TOKEN: ${{ secrets.DOCKERHUB_TOKEN != '' }}
+        run: |
+          if [ "$HAS_USER" != "true" ] || [ "$HAS_TOKEN" != "true" ]; then
+            echo "::error::Set the DOCKERHUB_USERNAME and DOCKERHUB_TOKEN repository secrets (docs/operations.md §8)."
+            exit 1
+          fi
+
+      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        if: env.PUSH == 'true'
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: docker.io/${{ env.NAMESPACE }}/${{ matrix.image }}
+          # main    → latest, main, sha-<7>
+          # v1.4.0  → 1.4.0, 1.4, sha-<7>
+          # PR      → pr-<n> (built, not pushed)
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-,enable=${{ github.event_name == 'push' }}
+            type=ref,event=pr
+          labels: |
+            org.opencontainers.image.title=${{ matrix.image }}
+
       - uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker/Dockerfile
-          push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          file: ${{ matrix.dockerfile }}
+          # amd64 for servers; arm64 so Apple-silicon test hosts can pull too.
+          platforms: linux/amd64,linux/arm64
+          push: ${{ env.PUSH == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}

@@ -885,6 +885,48 @@ themes. One pre-existing contrast defect surfaced and was fixed — the
 tracker's "No comments yet" placeholder was styled with the *border* colour
 (≈1.3:1, unreadable); it now uses the inherited muted text colour.
 
+## D-037 — Images are built by CI and pulled from Docker Hub; two images, namespace from config
+
+**Date:** 2026-09-29 · **Status:** Accepted
+
+**Requested**: CI builds the images and pushes them to Docker Hub with
+appropriate names; compose pulls from Docker Hub.
+
+**Decision**:
+
+| Image | Why this split |
+|---|---|
+| `<namespace>/advisory-hub` | `app` and `worker` are the same code with a different command. Two identical images would double push time and invite version skew between web and worker |
+| `<namespace>/advisory-hub-proxy` | nginx with the site template baked in, so a host needs no source checkout. Supersedes D-035's bind-mount of the template; certificates are still mounted, never baked |
+
+- **Namespace is configuration, not hard-coded** (`IMAGE_NAMESPACE` for
+  compose, `DOCKERHUB_NAMESPACE`/`DOCKERHUB_USERNAME` for CI).
+- **Unset namespace resolves to `localhost/…`, deliberately.** Docker treats
+  `localhost` as a registry host, so a production host that forgot to set
+  it fails to pull instead of falling back to some public default — a
+  default like `advisoryhub/…` would pull from whoever registered that
+  namespace, which is a supply-chain hole.
+- **Base compose has `image:` only; the dev override adds `build:` with
+  `pull_policy: build`.** With both in the base, `docker compose up` would
+  build rather than pull on a host where the image isn't present.
+- **Publishing is gated on `lint` + `test`** and happens only on pushes to
+  `main` and `v*` tags. PRs still build both images (no push), keeping the
+  old "image still builds" check.
+- Tags: `latest`/`main`/`sha-<commit>` from `main`; `X.Y.Z`/`X.Y` from tags.
+  Production should pin `IMAGE_TAG`; `latest` is a convenience.
+- Multi-arch (amd64 + arm64) so Apple-silicon test hosts can pull the same
+  image, at the cost of a slower (QEMU) arm64 build in CI. SBOM and
+  provenance attestations are attached.
+
+**Verified**: `actionlint` clean; `docker compose config` resolves correctly
+for development (builds `localhost/advisory-hub`, `pull_policy: build`),
+production (`acme/advisory-hub:1.4.0`, no build), and production + HTTPS
+(`acme/advisory-hub-proxy`, only the certificate directory mounted);
+`make images` builds both; the proxy image renders its baked-in template
+(`SERVER_NAME` substituted, HSTS default applied, `$host` preserved); the
+dev stack builds and boots from the override. **Not verified**: an actual
+CI run and push — needs the Docker Hub secrets set on the GitHub repo.
+
 ---
 
 ## Open decisions

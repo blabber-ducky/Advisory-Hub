@@ -124,6 +124,26 @@ docker/
 
 Newest first. Update this when work lands.
 
+### 2026-09-29 — CI publishes images to Docker Hub; compose pulls them
+- **On request**: CI's `images` job (after `lint` + `test`) builds and
+  pushes `<namespace>/advisory-hub` (app + worker, one image) and
+  `<namespace>/advisory-hub-proxy` (nginx with the HTTPS site config baked
+  in — new `docker/nginx/Dockerfile`). Pushes on `main` (`latest`, `main`,
+  `sha-…`) and `v*` tags (`X.Y.Z`, `X.Y`); PRs build without pushing.
+  Multi-arch, SBOM + provenance. docs/operations.md §8, D-037.
+- `docker-compose.yml` / `docker-compose.https.yml` now reference images
+  via `IMAGE_NAMESPACE`/`IMAGE_TAG` and never build; the dev override
+  builds locally (`pull_policy: build`). Unset namespace → `localhost/…`,
+  so a misconfigured host fails to pull rather than pulling a stranger's
+  image. New `make images`.
+- **Needs from the user**: `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN`
+  secrets (and optionally `DOCKERHUB_NAMESPACE` variable) on the GitHub
+  repo; `IMAGE_NAMESPACE` in each host's `.env`.
+- **Verified**: `actionlint` clean; compose resolves correctly in dev,
+  production and production + HTTPS; both images build locally; proxy
+  image renders its template; dev stack boots. **Not verified**: a real CI
+  run/push (secrets not set yet).
+
 ### 2026-09-29 — Bug fix: empty values rendered as a literal "&mdash;"
 - Every "no value" placeholder written as `{{ x or '&mdash;' }}` (21 places
   in 7 templates: advisory detail, scan panel, inventory list/detail, CSV

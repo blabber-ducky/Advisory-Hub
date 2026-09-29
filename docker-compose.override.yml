@@ -5,6 +5,13 @@
 # happen on an on-prem deployment. Delete this file (or use
 # `docker compose -f docker-compose.yml ...`) for a production-shaped run.
 
+# Built from the working tree, never pulled — see x-local-build below.
+x-local-build: &local-build
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+  pull_policy: build
+
 services:
   postgres:
     ports:
@@ -15,6 +22,7 @@ services:
       - "${REDIS_PORT:-6379}:6379"
 
   app:
+    <<: *local-build
     environment:
       ENVIRONMENT: development
       LOG_FORMAT: console
@@ -27,6 +35,7 @@ services:
       ["uvicorn", "advisory_hub.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
   worker:
+    <<: *local-build
     environment:
       ENVIRONMENT: development
       LOG_FORMAT: console

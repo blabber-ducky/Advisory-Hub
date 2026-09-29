@@ -52,7 +52,11 @@ check: lint types test  ## Everything CI runs
 serve:  ## Run the app locally with reload
 	$(VENV)/bin/uvicorn advisory_hub.main:app --reload --port 8000
 
+images:  ## Build both images locally under the names compose expects
+	docker build -f docker/Dockerfile       -t $${IMAGE_NAMESPACE:-localhost}/advisory-hub:$${IMAGE_TAG:-latest} .
+	docker build -f docker/nginx/Dockerfile -t $${IMAGE_NAMESPACE:-localhost}/advisory-hub-proxy:$${IMAGE_TAG:-latest} .
+
 admin:  ## Create an administrator account
 	$(PY) -m advisory_hub.cli create-admin
 
-.PHONY: help venv up down migrate testdb test lint fmt types check serve admin
+.PHONY: help venv up down migrate testdb test lint fmt types check serve images admin
