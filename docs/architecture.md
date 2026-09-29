@@ -318,6 +318,7 @@ REST API: the check previously passed any logged-in user regardless of role.
 | Credential theft | AES-GCM (Fernet) at rest with key from env/KMS; never returned by any endpoint |
 | Unattributable changes | Mandatory comment + `status_change` + append-only `audit_log` |
 | Token leakage | Hashed at rest, scoped, revocable, last-used tracked |
+| Credentials / session cookies sniffed on the network | HTTPS overlay: nginx terminates TLS 1.2/1.3, HTTP only redirects, `app` not published, cookie always `Secure`, HSTS (docs/operations.md §7, D-035) |
 
 ## 8. Deliberate non-goals (for now)
 

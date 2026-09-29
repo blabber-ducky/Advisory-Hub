@@ -795,6 +795,54 @@ the bulk VT-check flow (select three, queue, worker drains them,
 real results land back in the table) ran end-to-end against a real
 worker container and a real configured VirusTotal key.
 
+## D-035 — HTTPS is a compose overlay with an nginx proxy; certificates are installed per deployment, never generated or stored in the repo
+
+**Date:** 2026-09-29 · **Status:** Accepted
+
+**Requested**: an HTTPS option, *without* generating any certificates as
+part of the change, plus a script to use at deployment time.
+
+**Decision**: TLS terminates in an `nginx:1.27-alpine` `proxy` service
+defined in a separate overlay, `docker-compose.https.yml`, layered on
+`docker-compose.yml`. `scripts/https-setup.sh` installs and validates a
+certificate into a git-ignored `certs/` directory and writes
+`COMPOSE_FILE=docker-compose.yml:docker-compose.https.yml` into `.env`, so
+every later `docker compose …` command uses the overlay without extra
+flags. Walkthrough in docs/operations.md §7.
+
+**Alternatives rejected**:
+
+| Option | Why not |
+|---|---|
+| TLS in uvicorn (`--ssl-certfile`) | No HTTP→HTTPS redirect, no graceful cert reload, cipher/HSTS policy would live in Python code |
+| Caddy with automatic ACME | Most on-prem estates here issue from an internal CA and the host may have no inbound internet — ACME is the wrong default. Caddy can still do manual certs, but nginx is what the ops team is likelier to already know |
+| Baking TLS into `docker-compose.yml` | Would break plain-HTTP local development and force every dev to hold a cert |
+| Generating a cert in the image / at startup | Explicitly not wanted; also a self-signed cert silently in production is worse than a loud failure |
+
+**Consequences**:
+- With the overlay, `app`'s port is **not published** (`ports: !reset []`),
+  so plain HTTP can't bypass the proxy. That's also what makes
+  `FORWARDED_ALLOW_IPS=*` safe — uvicorn then records the real client IP
+  (from `X-Forwarded-For`) on sessions and the audit log instead of the
+  proxy's.
+- The script refuses a passphrase-protected key, a key that doesn't match
+  the certificate, an expired certificate, or one that doesn't cover
+  `SERVER_NAME`, *before* touching the installed pair.
+- Self-signed mode exists for bridging only and sets `HSTS_MAX_AGE=0`: a
+  browser that has cached HSTS won't let a user click past a certificate
+  warning.
+- `!reset` needs Docker Compose ≥ 2.24.
+
+**Verified**: overlay renders with `docker compose config` (proxy added,
+`app` ports removed, env applied); the nginx template renders through the
+image's own envsubst step with only `SERVER_NAME`/`HSTS_MAX_AGE` substituted
+and `$host` etc. preserved, and `nginx -t` parses it up to loading the
+certificate — which is absent, since none were generated; every script
+error path (missing args/files, non-PEM input, unknown option, no
+certificate installed) and the `.env` edit helpers were exercised against a
+scratch `.env`. **Not yet exercised: a real TLS handshake** — it needs a
+certificate, which was deliberately not created.
+
 ---
 
 ## Open decisions

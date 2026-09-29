@@ -31,6 +31,11 @@ docker compose -f docker-compose.yml up -d
 `APP_PORT` (default `8080`), `POSTGRES_PORT`, and `REDIS_PORT` are overridable
 when a port is already taken.
 
+**For anything users will actually log in to, serve it over HTTPS** — see §7.
+One script (`scripts/https-setup.sh`) installs the certificate and switches
+the stack to the HTTPS overlay; nothing about certificates is baked into the
+repo or the image.
+
 ### CLI
 
 | Command | Does |
@@ -47,6 +52,7 @@ when a port is already taken.
 | `app` | built from `docker/Dockerfile` | FastAPI: UI, REST API, MCP HTTP transport |
 | `worker` | same image, different command | RQ worker: ingestion, enrichment, inventory sync, scans |
 | `scheduler` | same image | RQ scheduler for cron-style inventory syncs (Phase 2) |
+| `proxy` | `nginx:1.27-alpine` | **HTTPS overlay only** (`docker-compose.https.yml`): terminates TLS, redirects HTTP → HTTPS, proxies to `app`. See §7. |
 | `postgres` | `postgres:16-alpine` | System of record |
 | `redis` | `redis:7-alpine` | Job queue, NVD cache, rate limiting |
 
@@ -101,7 +107,12 @@ Every variable belongs in `.env.example` with a dummy value and a comment.
 | `CSV_MAX_BYTES` | no | Default `20971520` (20 MB) — inventory CSV upload size cap |
 | `CSV_MAX_ROWS` | no | Default `200000` — inventory CSV row cap, enforced while parsing |
 | `INVENTORY_SYNC_POLL_SECONDS` | no | Default `300` — how often the worker checks active API sources for a due `schedule_cron` |
-| `SESSION_COOKIE_SECURE` | no | Default `true`; `false` only for local HTTP dev. |
+| `SESSION_COOKIE_SECURE` | no | Default `true`; `false` only for local HTTP dev. The HTTPS overlay forces `true`. |
+| `COMPOSE_FILE` | HTTPS only | **Compose-level.** `docker-compose.yml:docker-compose.https.yml` — written by `scripts/https-setup.sh` so plain `docker compose …` uses the HTTPS overlay. Also stops `docker-compose.override.yml` being applied, which is what you want in production. |
+| `SERVER_NAME` | HTTPS only | **Compose-level.** Hostname users browse to; must be in the certificate's subjectAltName. |
+| `HTTP_PORT` / `HTTPS_PORT` | no | **Compose-level.** Host ports for the proxy. Default `80` / `443`. |
+| `TLS_CERT_DIR` | no | **Compose-level.** Host directory with `server.crt` + `server.key`, mounted read-only into the proxy. Default `./certs` (git-ignored). |
+| `HSTS_MAX_AGE` | no | **Compose-level.** Seconds for `Strict-Transport-Security`. Default `31536000` (1 year); `0` disables. The script sets `0` for self-signed certificates. |
 | `LOG_LEVEL` | no | Default `INFO` |
 
 ## 4. Backup
@@ -224,3 +235,118 @@ Minimum viable signals:
 `/health` reports database, Redis, blob-volume writability, and inbox
 reachability as separate checks — a single boolean would hide exactly the
 failures worth alerting on.
+
+## 7. HTTPS
+
+HTTPS is an **overlay**, not a rebuild: `docker-compose.https.yml` adds an
+nginx `proxy` container in front of `app`. Certificates are **never** stored
+in the repo or generated at build time — they are installed per deployment
+with `scripts/https-setup.sh`, into `./certs/` (git-ignored) by default.
+
+```
+browser ──HTTPS :443──▶ proxy (nginx, TLS) ──HTTP :8000──▶ app
+browser ──HTTP  :80───▶ proxy ──301──▶ https://…
+```
+
+What the overlay changes:
+
+| | Plain (`docker-compose.yml`) | HTTPS overlay |
+|---|---|---|
+| Entry point | `app` on `APP_PORT` (8080) | `proxy` on `HTTPS_PORT` (443); port 80 only redirects |
+| `app`'s own port on the host | published | **not published** — reachable only through the proxy |
+| Session cookie | `Secure` per `SESSION_COOKIE_SECURE` | always `Secure` |
+| Client IP in audit log / sessions | the caller | the real caller, via `X-Forwarded-For` (uvicorn trusts it because `FORWARDED_ALLOW_IPS=*` — safe only because `app` isn't published) |
+| TLS | — | TLS 1.2/1.3, Mozilla "intermediate" ciphers, HSTS, `nosniff`, `X-Frame-Options: DENY` |
+| Upload limit | — | 25 MB (just above `CSV_MAX_BYTES`, so the app, not nginx, gives the error) |
+| Proxy timeout | — | 300 s — "Scan inbox now", "Sync now" and scans are synchronous |
+
+### 7.1 The script
+
+Run from the repository root on the deployment host. Requires `openssl`
+(1.1.1 or later) and an existing `.env`.
+
+| Command | Does |
+|---|---|
+| `install --cert F --key F [--chain F] [--ca F] --server-name H [--reload]` | Validates, installs to `certs/server.crt` (leaf + chain, 644) and `certs/server.key` (600), backs up any existing pair as `*.bak-<timestamp>`, and runs `enable` |
+| `csr --server-name H [--san LIST]` | Generates an RSA-3072 key and `certs/server.csr` to send to your CA. Refuses to overwrite an existing key |
+| `self-signed --server-name H [--san LIST] [--days N]` | Testing / bridging only. Generates a pair, sets `HSTS_MAX_AGE=0`, runs `enable` |
+| `check` | Re-validates the installed pair and confirms `.env` uses the overlay |
+| `enable --server-name H` | Writes `SERVER_NAME`, `SESSION_COOKIE_SECURE=true`, `COMPOSE_FILE` to `.env` (cert must already be installed) |
+| `disable` | Removes `COMPOSE_FILE` from `.env` (back to plain HTTP on `APP_PORT`) |
+
+`--san` takes extra names in OpenSSL form, e.g. `"DNS:advisoryhub,IP:10.0.4.20"`.
+`--cert-dir DIR` overrides `./certs`; `ENV_FILE=…` overrides `./.env`.
+
+What `install` checks before touching anything — any failure stops it:
+
+| Check | Fails when |
+|---|---|
+| Parse | Certificate isn't PEM, or key isn't PEM |
+| Key is unencrypted | Key has a passphrase — nginx can't prompt. Decrypt with `openssl pkey -in enc.key -out server.key` |
+| Key ↔ certificate | The key's public half doesn't match the certificate's |
+| Expiry | Already expired (warns if under 30 days) |
+| Hostname | `--server-name` isn't in the certificate's subjectAltName |
+| Chain (only with `--ca`) | Leaf doesn't verify to the given root — usually a missing `--chain` |
+| Self-signed | Warns only |
+
+### 7.2 Deploying with a certificate from your CA (the normal path)
+
+```bash
+# 1. On the deployment host, create a key + CSR. The key never leaves the host.
+scripts/https-setup.sh csr --server-name advisoryhub.corp.example \
+    --san "DNS:advisoryhub"
+
+# 2. Send certs/server.csr to your CA / PKI team. When the signed cert comes back:
+scripts/https-setup.sh install --cert advisoryhub.crt --chain issuing-ca.crt \
+    --key certs/server.key --server-name advisoryhub.corp.example \
+    --ca corp-root-ca.crt
+
+# 3. Start (or restart) the stack on the overlay.
+docker compose up -d --remove-orphans
+docker compose ps           # proxy should be "healthy"
+```
+
+If you were handed a certificate **and** key already (e.g. a wildcard), skip
+step 1 and pass both to `install`.
+
+Then check from a client:
+
+```bash
+curl -I https://advisoryhub.corp.example/health/live   # 200, strict-transport-security header
+curl -I http://advisoryhub.corp.example/               # 301 to https://
+```
+
+### 7.3 Renewing / replacing the certificate
+
+Same `install` command with the new files, plus `--reload` — nginx re-reads
+the certificate without dropping connections; no app restart. The previous
+pair is kept as `certs/server.*.bak-<timestamp>`.
+
+```bash
+scripts/https-setup.sh install --cert new.crt --chain issuing-ca.crt \
+    --key certs/server.key --server-name advisoryhub.corp.example --reload
+scripts/https-setup.sh check     # add to a monthly reminder — warns under 30 days
+```
+
+(To reuse the existing key, point `--key` at `certs/server.key`; to rotate
+the key, move it aside and run `csr` again first.)
+
+### 7.4 Before a CA certificate is available
+
+`scripts/https-setup.sh self-signed --server-name advisoryhub.corp.example`
+gets TLS working immediately. Browsers will warn until the certificate is
+trusted on each client, and HSTS is left **off** (`HSTS_MAX_AGE=0`) so users
+can still click through. When the real certificate arrives, run `install`
+and delete the `HSTS_MAX_AGE=0` line from `.env`.
+
+### 7.5 Troubleshooting
+
+| Symptom | Likely cause |
+|---|---|
+| `SERVER_NAME must be set` on `docker compose up` | `.env` has `COMPOSE_FILE` but no `SERVER_NAME` — run `enable --server-name …` |
+| `proxy` restarting, log says `cannot load certificate` | Nothing in `TLS_CERT_DIR`, or the key isn't readable. With rootless Docker or user-namespace remapping, `chmod 640 certs/server.key` and give the container's group read access |
+| Login redirects straight back to the login page | You're on plain HTTP (e.g. after `disable`, via `APP_PORT`) — the `Secure` cookie isn't sent. Use the `https://` URL |
+| Browser: `NET::ERR_CERT_COMMON_NAME_INVALID` | Browsing by a name/IP not in the SAN. Re-issue with that name in `--san` |
+| Browser: "incomplete chain" on some clients only | `server.crt` lacks the intermediate — re-run `install` with `--chain` |
+| Audit log shows the proxy's IP for every user | `app` started without the overlay's `FORWARDED_ALLOW_IPS` — check `docker compose config` includes `docker-compose.https.yml` |
+| Port 80/443 already in use | Set `HTTP_PORT` / `HTTPS_PORT` in `.env` |

@@ -124,6 +124,24 @@ docker/
 
 Newest first. Update this when work lands.
 
+### 2026-09-29 — HTTPS deployment option
+- **On request** ("HTTPS option … don't generate any certificates now …
+  create a script I can use during deployment"): new overlay
+  `docker-compose.https.yml` adds an nginx `proxy` that terminates TLS
+  (1.2/1.3, HSTS, HTTP→HTTPS redirect) and stops publishing `app`'s plain
+  port. `scripts/https-setup.sh` (`install`/`csr`/`self-signed`/`check`/
+  `enable`/`disable`) validates a certificate (parses, key matches, not
+  expired, covers `SERVER_NAME`, optional chain check), installs it into
+  git-ignored `certs/`, and writes `COMPOSE_FILE` etc. into `.env`. **No
+  certificate was generated.** docs/operations.md §7, D-035.
+- Side benefit: with the overlay, uvicorn trusts `X-Forwarded-For`
+  (`FORWARDED_ALLOW_IPS`), so sessions/audit record the real client IP,
+  not the proxy's — safe only because `app` is no longer published.
+- **Verified**: overlay renders via `docker compose config`; nginx template
+  renders and parses up to the (absent) cert; script's error paths and
+  `.env` editing exercised on a scratch `.env`. **Not verified**: an actual
+  TLS handshake — needs a certificate, deliberately not created.
+
 ### 2026-08-26 — IOC-type indicator on the tracker, and sorting by IOC mix
 - **New, on request** ("sort the advisories based [on] the number of
   different kind of IOCs in them ... add indicator for the types of IOCs"):

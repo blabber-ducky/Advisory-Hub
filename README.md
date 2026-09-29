@@ -68,6 +68,10 @@ open http://localhost:8080
 conveniences (published database port, live reload, console logs). For a
 production-shaped run, use `docker compose -f docker-compose.yml up -d`.
 
+For a real deployment, serve it over **HTTPS**: install your certificate with
+`scripts/https-setup.sh install …` and restart — see
+[docs/operations.md §7](docs/operations.md#7-https).
+
 ### Working on it locally
 
 ```bash
