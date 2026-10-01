@@ -130,6 +130,47 @@ docker-compose.prod.yml      # production, self-contained — see docs/deploymen
 
 Newest first. Update this when work lands.
 
+### 2026-10-01 — Production deployment option without the bundled proxy
+- **On request** ("a production deployment option without proxy ... use an
+  enterprise WAF or proxy"): new `docker-compose.prod.no-proxy.yml`, a
+  second self-contained production file alongside `docker-compose.prod.yml`
+  (same rationale as D-038) — same hardening (read-only root fs, dropped
+  capabilities, resource limits, internal `backend` network, one-shot
+  `migrate`), minus the bundled nginx `proxy`; `app` publishes its own port
+  directly instead. New `.env.production.no-proxy.example`. D-040.
+- **The one real design decision**: `FORWARDED_ALLOW_IPS` can no longer be
+  `*`. That default is safe in the bundled-proxy file only because nothing
+  but the proxy container can ever reach `app`; here `app`'s port is
+  directly reachable, so trusting every peer would let anyone forge
+  `X-Forwarded-For`/`-Proto` and corrupt the audit log or fake HTTPS over
+  plain HTTP. New required compose variable `TRUSTED_PROXY_IPS` (no `*`
+  default, no CIDR — literal WAF/proxy address(es) only) closes that gap;
+  the operator's firewall is still responsible for keeping the port
+  unreachable from anywhere else, documented as such since the stack can't
+  enforce it.
+- Considered and rejected: Compose `profiles:` to make the existing
+  `proxy` service opt-in (would silently drop an already-deployed host's
+  proxy — and its only published port — on the next `up -d` after
+  upgrading, with no loud failure); an overlay on `docker-compose.prod.yml`
+  (Compose has no way to merge-delete a service). See D-040 for both.
+- `scripts/https-setup.sh` (TLS-proxy-only) now refuses to run against the
+  no-proxy file's `.env` with a message pointing at deployment.md §1b,
+  rather than silently doing something meaningless to it; `--help` still
+  works regardless of `COMPOSE_FILE`.
+- Docs: docs/deployment.md new §1b (topology, prerequisites, install,
+  troubleshooting rows); docs/operations.md (file/containers/configuration
+  tables, §7 HTTPS intro); docs/architecture.md (production topology
+  mention, a new threat-model row for the forwarded-header trust boundary).
+- **Verified**: `docker compose config` resolves cleanly against the new
+  file with synthetic secrets; `TRUSTED_PROXY_IPS` fails fast with a clear
+  message when unset, matching every other required production secret;
+  confirmed the existing bundled-proxy file's `https-setup.sh` behaviour is
+  unchanged, and the new guard fires correctly for the no-proxy file while
+  leaving `--help` usable. **Not verified**: a real deployment behind an
+  actual enterprise WAF — none was available to test against; recheck the
+  forwarded-header contract against whichever product is actually used
+  before go-live.
+
 ### 2026-09-29 — CI mypy failure: SQLAlchemy 2.1 pulled in by an unbounded range
 - First CI run failed `mypy` with 17 errors not seen locally. Reproduced in a
   clean `python:3.13` container: fresh installs resolve SQLAlchemy **2.1.1**

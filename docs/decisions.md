@@ -995,6 +995,61 @@ whenever an image happens to be built.
 same way. A lock (`uv lock` / `pip-compile`) used by CI and the Dockerfile
 would make builds reproducible; not done here.
 
+## D-040 — A second, self-contained production compose file for deployments behind an enterprise WAF/reverse proxy
+
+**Date:** 2026-10-01 · **Status:** Accepted
+
+**Requested**: a production deployment option without the bundled nginx
+proxy, for sites that terminate TLS at an enterprise WAF or reverse proxy
+(F5, Citrix ADC, Imperva, Azure Application Gateway, Cloudflare Enterprise,
+…) instead.
+
+**Decision**: `docker-compose.prod.no-proxy.yml`, a second self-contained
+production file alongside `docker-compose.prod.yml` (same reasoning as
+D-038 — production's hardening diverges from the base file in almost every
+service, so the shape you read is the shape that runs; the file is a near-
+duplicate of `docker-compose.prod.yml` with the `proxy` service removed and
+`app` publishing its own port). Two alternatives were rejected:
+
+| Alternative | Rejected because |
+|---|---|
+| Compose `profiles:` to make `proxy` opt-in on the existing file | Profile-having services are *off* by default unless the profile is activated. Any already-deployed host upgrading `docker-compose.prod.yml` without also setting the new profile variable would silently lose its proxy — and with it, its only published port and its TLS termination — at the next `docker compose up -d`. A breaking change with no loud failure is worse than the duplication an overlay avoids |
+| An overlay on top of `docker-compose.prod.yml` | Compose has no merge operation to *delete* a service, only to add/replace/`!reset` keys on one that exists in both files. Removing `proxy` entirely isn't expressible as an overlay |
+
+**The one thing that genuinely changes, not just "proxy present or not"**:
+trust in `X-Forwarded-For`/`X-Forwarded-Proto`. The bundled proxy's
+`FORWARDED_ALLOW_IPS=*` is safe *only* because `app` has no published port —
+the proxy container is the one and only thing that can ever connect to it.
+The no-proxy file publishes `app`'s port directly, so that assumption no
+longer holds: anyone who can reach the port could forge those headers,
+corrupting the audit log's client IP or impersonating an HTTPS connection
+over plain HTTP. `docker-compose.prod.no-proxy.yml` therefore requires
+**`TRUSTED_PROXY_IPS`** — a required compose variable, no `*` default,
+naming the WAF/proxy's own literal address(es) — and documents that the
+operator's firewall, not this stack, must keep the port unreachable from
+anywhere else. This is the one part of the bundled-proxy design that cannot
+simply be deleted; it has to be replaced with an explicit trust boundary.
+
+**Deliberately out of scope**: a TLS listener of any kind in the no-proxy
+file — `app` only ever speaks plain HTTP; `scripts/https-setup.sh` is
+guarded to refuse to run against it (there is nothing in this file for it to
+configure). HSTS, redirects, and the certificate itself are the WAF/proxy's
+job, not this stack's — duplicating them here would just be a second place
+for them to drift out of sync with whatever the WAF actually does.
+
+**Verified**: `docker compose config` resolves cleanly against both files
+with synthetic secrets; the new required `TRUSTED_PROXY_IPS` variable
+correctly fails fast (`docker compose config`, no value set) with a message
+naming where to set it, the same pattern every other required production
+secret already uses; confirmed the existing bundled-proxy file's behaviour
+(`disable` still refused, `check`/`enable` unaffected) is unchanged by the
+new guard in `scripts/https-setup.sh`, and that the guard itself fires for
+the no-proxy file's `.env` while leaving `--help` usable regardless of
+`COMPOSE_FILE`. Not deployed against a real WAF — no enterprise WAF/reverse
+proxy was available to test against; the request/response contract
+(forwarded headers, trust boundary) is rechecked against whichever product
+is actually used before go-live.
+
 ---
 
 ## Open decisions

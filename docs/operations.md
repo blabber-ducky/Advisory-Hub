@@ -36,7 +36,8 @@ the source tree.
 | `docker-compose.yml` | Base stack. Pulls images; plain HTTP on `APP_PORT` |
 | `docker-compose.override.yml` | Auto-applied in development: builds from the working tree, reload, published DB/Redis ports |
 | `docker-compose.https.yml` | Overlay adding the TLS proxy to the base stack — for trying HTTPS outside production (§7) |
-| `docker-compose.prod.yml` | **Production.** Self-contained; used alone |
+| `docker-compose.prod.yml` | **Production, with the bundled TLS proxy.** Self-contained; used alone |
+| `docker-compose.prod.no-proxy.yml` | **Production, behind an enterprise WAF/reverse proxy.** Self-contained; used alone. `app` publishes its own port directly; no TLS in this stack at all (deployment.md §1b, D-040) |
 
 Every file passes the whole `.env` into `app`/`worker`, so any variable in
 §3 can be set there. (Until 2026-09-29 the base file passed only a
@@ -66,8 +67,8 @@ repo or the image.
 |---|---|---|
 | `app` | `<IMAGE_NAMESPACE>/advisory-hub` (`docker/Dockerfile`) | FastAPI: UI, REST API, MCP HTTP transport |
 | `worker` | same image, different command | RQ worker: ingestion, enrichment, inventory sync, scans |
-| `migrate` | same image | **Production file only.** Runs `alembic upgrade head` and exits; `app`/`worker` start only after it succeeds |
-| `proxy` | `<IMAGE_NAMESPACE>/advisory-hub-proxy` (`docker/nginx/Dockerfile`) | **Production file and HTTPS overlay only**: nginx with the site config baked in; terminates TLS, redirects HTTP → HTTPS, proxies to `app`. See §7. |
+| `migrate` | same image | **Production files only.** Runs `alembic upgrade head` and exits; `app`/`worker` start only after it succeeds |
+| `proxy` | `<IMAGE_NAMESPACE>/advisory-hub-proxy` (`docker/nginx/Dockerfile`) | **`docker-compose.prod.yml` and the HTTPS overlay only** — not present in `docker-compose.prod.no-proxy.yml`. nginx with the site config baked in; terminates TLS, redirects HTTP → HTTPS, proxies to `app`. See §7. |
 
 Inventory syncs are scheduled by a poller thread inside `worker` — there is
 no separate scheduler container.
@@ -127,15 +128,17 @@ Every variable belongs in `.env.example` with a dummy value and a comment.
 | `INVENTORY_SYNC_POLL_SECONDS` | no | Default `300` — how often the worker checks active API sources for a due `schedule_cron` |
 | `IMAGE_NAMESPACE` | yes (production) | **Compose-level.** Docker Hub user/org the images are pulled from, e.g. `acme` → `acme/advisory-hub`. Unset → `localhost/…`: only locally built images work, and a pull fails loudly rather than fetching from someone else's namespace. See §8. |
 | `IMAGE_TAG` | recommended | **Compose-level.** Image tag for `app`/`worker`/`proxy`. Default `latest`; pin a release (`1.4.0`) or commit (`sha-1a2b3c4`) in production. |
-| `WEB_CONCURRENCY` | no | **Production file.** uvicorn processes for `app`. Default `1`; each extra costs ~100 MB — raise `app`'s memory limit in `docker-compose.prod.yml` to match |
-| `BIND_ADDRESS` | no | **Compose-level, production file.** Host interface the proxy listens on. Default `0.0.0.0`; set the internal NIC's address to keep it off other interfaces |
+| `WEB_CONCURRENCY` | no | **Production files.** uvicorn processes for `app`. Default `1`; each extra costs ~100 MB — raise `app`'s memory limit in the compose file to match |
+| `BIND_ADDRESS` | no | **Compose-level, production files.** Host interface the published service listens on — the proxy in `docker-compose.prod.yml`, `app` itself in `docker-compose.prod.no-proxy.yml`. Default `0.0.0.0`; set the internal NIC's address to keep it off other interfaces |
+| `APP_PORT` | no | **Compose-level.** Host port `app` listens on. Default `8080` in the base/dev file; default `8000` in `docker-compose.prod.no-proxy.yml`, where it's the only published port (deployment.md §1b) |
+| `TRUSTED_PROXY_IPS` | yes (`docker-compose.prod.no-proxy.yml`) | **Compose-level**, maps to `FORWARDED_ALLOW_IPS` for uvicorn. Comma-separated literal IP address(es) of your WAF/reverse proxy — **not** `*` and **not** a CIDR. Unlike the bundled proxy (where trusting every peer is safe because only that one container can reach `app`), `app`'s port here is reachable by whatever the firewall allows, so this must name every address the WAF/proxy itself connects from. See D-040, deployment.md §1b. |
 | `POSTGRES_PASSWORD` | yes (production) | **Compose-level.** Database password, embedded in `DATABASE_URL` by compose — use hex (`openssl rand -hex 32`) so it's URL-safe. Only read when the database volume is first created |
-| `SESSION_COOKIE_SECURE` | no | Default `true`; `false` only for local HTTP dev. The HTTPS overlay forces `true`. |
-| `COMPOSE_FILE` | production / HTTPS | **Compose-level.** Which compose file(s) plain `docker compose …` uses. `docker-compose.prod.yml` in production (set by `.env.production.example`); `docker-compose.yml:docker-compose.https.yml` for the HTTPS overlay (written by `scripts/https-setup.sh`, which leaves a production value alone). Either one also stops `docker-compose.override.yml` being applied. |
-| `SERVER_NAME` | HTTPS only | **Compose-level.** Hostname users browse to; must be in the certificate's subjectAltName. |
-| `HTTP_PORT` / `HTTPS_PORT` | no | **Compose-level.** Host ports for the proxy. Default `80` / `443`. |
-| `TLS_CERT_DIR` | no | **Compose-level.** Host directory with `server.crt` + `server.key`, mounted read-only into the proxy. Default `./certs` (git-ignored). |
-| `HSTS_MAX_AGE` | no | **Compose-level.** Seconds for `Strict-Transport-Security`. Default `31536000` (1 year); `0` disables. The script sets `0` for self-signed certificates. |
+| `SESSION_COOKIE_SECURE` | no | Default `true`; `false` only for local HTTP dev. The HTTPS overlay and both production files force `true`. |
+| `COMPOSE_FILE` | production / HTTPS | **Compose-level.** Which compose file(s) plain `docker compose …` uses. `docker-compose.prod.yml` (set by `.env.production.example`) or `docker-compose.prod.no-proxy.yml` (set by `.env.production.no-proxy.example`) in production; `docker-compose.yml:docker-compose.https.yml` for the HTTPS overlay (written by `scripts/https-setup.sh`, which leaves a production value alone). Any of these also stops `docker-compose.override.yml` being applied. |
+| `SERVER_NAME` | HTTPS only | **Compose-level.** Hostname users browse to; must be in the certificate's subjectAltName. Not used by `docker-compose.prod.no-proxy.yml` — there is no certificate in that file. |
+| `HTTP_PORT` / `HTTPS_PORT` | no | **Compose-level.** Host ports for the proxy. Default `80` / `443`. Not used by `docker-compose.prod.no-proxy.yml`. |
+| `TLS_CERT_DIR` | no | **Compose-level.** Host directory with `server.crt` + `server.key`, mounted read-only into the proxy. Default `./certs` (git-ignored). Not used by `docker-compose.prod.no-proxy.yml`. |
+| `HSTS_MAX_AGE` | no | **Compose-level.** Seconds for `Strict-Transport-Security`. Default `31536000` (1 year); `0` disables. The script sets `0` for self-signed certificates. Not used by `docker-compose.prod.no-proxy.yml` — set HSTS on your WAF/proxy instead. |
 | `LOG_LEVEL` | no | Default `INFO` |
 
 ## 4. Backup
@@ -272,6 +275,12 @@ production, `docker-compose.https.yml` adds the same proxy to the base stack
 as an **overlay**. Either way, certificates are **never** stored in the repo
 or generated at build time — they are installed per deployment with
 `scripts/https-setup.sh`, into `./certs/` (git-ignored) by default.
+
+**None of this section applies if TLS is terminated by an enterprise
+WAF/reverse proxy instead** — use `docker-compose.prod.no-proxy.yml`, which
+has no certificate or TLS listener at all; `scripts/https-setup.sh` refuses
+to touch it. See deployment.md §1b and D-040 for that trust boundary
+(`TRUSTED_PROXY_IPS`) instead.
 
 ```
 browser ──HTTPS :443──▶ proxy (nginx, TLS) ──HTTP :8000──▶ app

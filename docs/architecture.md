@@ -66,7 +66,10 @@ In production (`docker-compose.prod.yml`) an nginx `proxy` terminates TLS in
 front of `app` and is the only published service; Postgres and Redis sit on
 an internal network with no outside route; a one-shot `migrate` container
 applies migrations before `app`/`worker` start. Topology and hardening are
-in [deployment.md](deployment.md) §1.
+in [deployment.md](deployment.md) §1. A second production file,
+`docker-compose.prod.no-proxy.yml`, drops the bundled proxy and publishes
+`app` directly for deployments where an enterprise WAF/reverse proxy
+terminates TLS instead — deployment.md §1b, D-040.
 
 ## 3. Components
 
@@ -364,6 +367,7 @@ REST API: the check previously passed any logged-in user regardless of role.
 | Unattributable changes | Mandatory comment + `status_change` + append-only `audit_log` |
 | Token leakage | Hashed at rest, scoped, revocable, last-used tracked |
 | Credentials / session cookies sniffed on the network | HTTPS overlay: nginx terminates TLS 1.2/1.3, HTTP only redirects, `app` not published, cookie always `Secure`, HSTS (docs/operations.md §7, D-035) |
+| Spoofed `X-Forwarded-For`/`-Proto` (audit-log IP forgery, fake HTTPS scheme) when `app`'s port is reachable by more than one trusted sidecar (`docker-compose.prod.no-proxy.yml`) | `FORWARDED_ALLOW_IPS` pinned to `TRUSTED_PROXY_IPS` — only the operator-declared WAF/proxy address(es) are trusted to set those headers; the firewall, not this app, must keep everyone else from reaching the port at all (deployment.md §1b, D-040) |
 
 ## 8. Deliberate non-goals (for now)
 

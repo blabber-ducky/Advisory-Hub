@@ -6,6 +6,10 @@
 # runs automatically; it is meant to be run by whoever deploys, on the
 # deployment host, from the repository root.
 #
+# Does not apply to docker-compose.prod.no-proxy.yml — that file has no TLS
+# listener at all; it expects an enterprise WAF/reverse proxy outside Docker
+# to terminate TLS. See docs/deployment.md §1b.
+#
 # Full walkthrough: docs/operations.md §7.
 
 set -euo pipefail
@@ -14,6 +18,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$ROOT/.env}"
 COMPOSE_FILES="docker-compose.yml:docker-compose.https.yml"
 PROD_COMPOSE_FILE="docker-compose.prod.yml"   # TLS built in; left as-is
+NO_PROXY_COMPOSE_FILE="docker-compose.prod.no-proxy.yml"   # no TLS listener in this file at all; this script does not apply (docs/deployment.md §1b)
 EXPIRY_WARN_DAYS=30
 CLEANUP=()
 trap 'rm -f ${CLEANUP[@]+"${CLEANUP[@]}"}' EXIT
@@ -309,6 +314,11 @@ SERVER_NAME="${SERVER_NAME:-$(env_get SERVER_NAME)}"
 CERT_DIR="${CERT_DIR:-$(env_get TLS_CERT_DIR)}"
 CERT_DIR="${CERT_DIR:-$ROOT/certs}"
 [[ "$CERT_DIR" = /* ]] || CERT_DIR="$ROOT/${CERT_DIR#./}"
+
+if [[ "$COMMAND" != "-h" && "$COMMAND" != "--help" && "$COMMAND" != "help" ]] \
+   && [[ "$(env_get COMPOSE_FILE)" == "$NO_PROXY_COMPOSE_FILE" ]]; then
+  die "$NO_PROXY_COMPOSE_FILE has no TLS listener to configure — it expects TLS to be terminated by an enterprise WAF/reverse proxy outside Docker (docs/deployment.md §1b, D-040)"
+fi
 
 case "$COMMAND" in
   install)     cmd_install ;;

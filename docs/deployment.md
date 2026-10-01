@@ -10,7 +10,8 @@ tagged, [operations.md §8](operations.md#8-images-and-publishing).
 >
 > | File | Use for |
 > |---|---|
-> | `docker-compose.prod.yml` | **Production.** Self-contained; this guide. |
+> | `docker-compose.prod.yml` | **Production, with the bundled TLS proxy.** Self-contained; this guide. |
+> | `docker-compose.prod.no-proxy.yml` | **Production, behind an enterprise WAF/reverse proxy.** Self-contained; §1b. |
 > | `docker-compose.yml` + `docker-compose.override.yml` | Development — builds from the working tree, plain HTTP on 8080. |
 > | `docker-compose.yml` + `docker-compose.https.yml` | Trying HTTPS on a dev/staging stack. Not hardened like the production file. |
 
@@ -61,6 +62,87 @@ tagged, [operations.md §8](operations.md#8-images-and-publishing).
 
 The proxy keeps nginx's default capabilities (it binds 80/443 and drops to
 an unprivileged user itself).
+
+## 1b. Deploying behind an enterprise WAF / reverse proxy instead
+
+Use `docker-compose.prod.no-proxy.yml` when TLS is already terminated by an
+enterprise WAF or reverse proxy (F5 BIG-IP, Citrix ADC, Imperva, Azure
+Application Gateway, Cloudflare Enterprise, …) and the bundled nginx
+container would just be a redundant extra hop. Same hardening as §1 —
+read-only filesystems, dropped capabilities, resource limits, internal
+`backend` network, one-shot `migrate` — with one piece removed and one
+piece added:
+
+```
+                 TLS terminated by your WAF/proxy — outside this stack
+ users ─────────────────────────┐
+                                ▼
+                    enterprise WAF / reverse proxy
+                                │ plain HTTP :<APP_PORT>
+                     ┌──────────▼──────────┐        network: frontend
+                     │ app   (FastAPI)     │   ─────► VirusTotal, inventory APIs
+                     └──────────┬──────────┘
+          network: backend      │           (internal — no route out)
+        ┌───────────────────────┼─────────────────────────┐
+        │   ┌──────────────┐  ┌─▼────────────┐  ┌───────┐ │
+        │   │ postgres     │  │ redis        │  │worker │─┼──► NVD, VirusTotal,
+        │   └──────────────┘  └──────────────┘  └───────┘ │    inventory APIs
+        │   migrate (runs `alembic upgrade head`, exits)  │    (network: egress)
+        └─────────────────────────────────────────────────┘
+```
+
+| | `docker-compose.prod.yml` | `docker-compose.prod.no-proxy.yml` |
+|---|---|---|
+| TLS | Bundled nginx `proxy` | Your WAF/proxy — outside this stack entirely |
+| Published service | `proxy` (80/443) | `app` itself (`APP_PORT`, default 8000) |
+| `scripts/https-setup.sh` | Required — installs the certificate | **Does not apply** — there is no certificate or TLS listener in this file |
+| Trusted forwarders | Any peer (`FORWARDED_ALLOW_IPS=*`) — safe only because only the proxy container can reach `app` | **Only `TRUSTED_PROXY_IPS`** — `app`'s port is reachable by whatever your firewall allows, so trusting every peer would let anyone spoof `X-Forwarded-For`/`-Proto` directly. See D-040 |
+| `SERVER_NAME`, `HTTP_PORT`/`HTTPS_PORT`, `TLS_CERT_DIR`, `HSTS_MAX_AGE` | Used | Not used — configure HSTS, redirects and certificates on your WAF/proxy instead |
+
+**What your WAF/proxy must do**, since this stack can't enforce any of it:
+
+- Terminate TLS and forward plain HTTP to `app` — `app` has no TLS listener.
+- Forward `Host`, `X-Forwarded-For`, and `X-Forwarded-Proto` unmodified (and
+  ideally `X-Forwarded-Port`), so the audit log records the real client IP
+  and the session cookie's `Secure` logic sees the original scheme.
+- Be the *only* thing that can reach `app`'s published port — firewall it so
+  the port is unreachable from the general network or the internet. A
+  missing or too-broad firewall rule here, not a bug in the stack, is what
+  would let someone bypass the WAF.
+
+**Prerequisites**, in place of §2's TLS-certificate and 443/80 rows: the
+WAF/proxy's own IP address(es) (for `TRUSTED_PROXY_IPS`), and a firewall
+rule limiting `APP_PORT` to the WAF/proxy's network path.
+
+**Install** mirrors §3, with these differences:
+
+```bash
+cp .env.production.no-proxy.example .env   # instead of .env.production.example
+chmod 600 .env
+#   fill in every CHANGE_ME, including TRUSTED_PROXY_IPS — the comma-
+#   separated address(es) your WAF/proxy connects from (not a CIDR).
+#   Skip the certificate step (§3.3) entirely.
+docker compose pull
+docker compose up -d
+docker compose ps            # all "healthy"; migrate "Exited (0)"
+```
+
+Point your WAF/proxy's backend/pool at `http://<this-host>:<APP_PORT>`, then
+verify from the WAF side (not directly against `app`, which should be
+unreachable from anywhere else):
+
+```bash
+curl -sI https://advisoryhub.corp.example/health/live   # through the WAF: 204
+```
+
+and confirm the audit log shows real client IPs, not the WAF's own address
+— sign in from two different machines and check `GET /admin` (or the
+`audit_log` table) records two distinct IPs.
+
+Everything else — upgrading (§4), rolling back (§5), day-to-day commands
+(§6) — is identical; just substitute `docker-compose.prod.no-proxy.yml` and
+`.env.production.no-proxy.example` wherever §1 and §3 said
+`docker-compose.prod.yml`/`.env.production.example`.
 
 ## 2. Prerequisites
 
@@ -196,4 +278,7 @@ the old version serving untouched: read the output, fix or roll back
 | Emails sit in the inbox folder | Check the worker log for `Exception in thread`; `INBOX_HOST_PATH` must be an absolute path the container user (uid 10001) can write |
 | Integrations fail with SSRF errors | Host not in `OUTBOUND_ALLOWLIST` |
 | `Read-only file system` in a log | Something wrote outside `/tmp` or `/data/*` — a bug worth reporting, not a reason to drop `read_only` |
-| Proxy restarting | Certificate missing/unreadable — `scripts/https-setup.sh check`; see operations.md §7.5 |
+| Proxy restarting (`docker-compose.prod.yml` only) | Certificate missing/unreadable — `scripts/https-setup.sh check`; see operations.md §7.5 |
+| `docker-compose.prod.no-proxy.yml`: `required variable TRUSTED_PROXY_IPS is missing a value` | `.env` still has `CHANGE_ME` for it — set it to your WAF/proxy's own address(es) (§1b) |
+| `docker-compose.prod.no-proxy.yml`: audit log / sessions show the WAF's own IP for every user | `TRUSTED_PROXY_IPS` doesn't match the address the WAF actually connects from (e.g. an HA pair with two egress IPs, or it's behind its own NAT) — add every address it can appear as |
+| `docker-compose.prod.no-proxy.yml`: `app` reachable directly, bypassing the WAF | Firewall gap, not a stack bug — `APP_PORT` must be unreachable except from the WAF/proxy's network path (§1b) |
