@@ -107,6 +107,7 @@ advisory_hub/
   ingest/          # watcher, email parser, pdf parser, extractors, classifier
   enrich/          # NVD client, cache, CPE normalisation
   inventory/       # csv adapters, api adapters, version normalisation, matcher
+  manual_tracker/  # reading the team's spreadsheet tracker (safe xlsx reader, CSV format)
   api/             # FastAPI REST routers (thin)
   web/             # Jinja templates + HTMX partial routes (thin)
   mcp/             # MCP server exposing core services as tools (thin)
@@ -127,6 +128,36 @@ docker-compose.prod.yml      # production, self-contained, behind your WAF — s
 ## 4. Progress log
 
 Newest first. Update this when work lands.
+
+### 2026-10-04 — Import the manual spreadsheet tracker
+- **On request** ("convert [the tracker] into a single csv, put all info
+  not already parsed in the tool to the comments … an option on the tool
+  to upload this tracker and update the status of advisories"). D-042;
+  how it works, incl. the full status-rule table: docs/architecture.md
+  §3.3.3.
+- New: `manual_tracker/` (`xlsx.py` — safe multi-sheet reader;
+  `parse.py` — month-sheet detection by header, CSV format),
+  `core/services/tracker_import.py` (`STATUS_RULES`/`infer_status`,
+  `build_comment`, `transition_path`, `preview_import`, `apply_import`),
+  `web/tracker_import.py` + `tracker_import.html` (upload → preview →
+  apply, "Download as CSV"), CLI `tracker-to-csv`. Link on the tracker page.
+- **Converted** the uploaded `Test_Files/Security_Advisories-2026.xlsx`
+  into `Test_Files/Security_Advisories-2026.csv` (git-ignored, like the
+  workbook): 174 rows — 63 Not applicable, 31 Triaged, 27 Remediated, 18 In
+  progress, 6 Risk accepted, 1 Awaiting vendor, 28 no status change (27
+  blank actions + "Pending response from …", deliberately not guessed).
+- **Caught before it shipped**: the plain shortest status path recorded
+  NEW → Remediated as passing through Awaiting vendor (alphabetical
+  tie-break) — false history in an append-only audit log. Intermediate
+  steps are now restricted to the plain lifecycle; a test checks every
+  status pair.
+- **Not done**: no REST endpoint for the import (web + CLI only). The
+  status rules encode assumptions the team should confirm (D-042).
+- **Verified**: 658 tests passing (64 new); `ruff`/`mypy --strict` clean.
+  Real workbook read identically to openpyxl (174/174 rows). Real-data
+  dry run on a dropped copy of the dev database through the actual web
+  upload: 97 advisories updated in 135 legal steps, re-import a no-op,
+  both records of re-issued DOH-2026591 updated. Dev database untouched.
 
 ### 2026-10-04 — Bundled HTTPS reverse proxy removed
 - **On request** ("remove the https reverse proxy option altogether … remove

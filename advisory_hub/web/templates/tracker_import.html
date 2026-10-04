@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge %}
+{% block content %}
+<p style="margin:0 0 .4rem"><a href="/">&larr; Back to tracker</a></p>
+<h1 style="font-size:1.3rem;margin:0 0 .35rem">Import manual tracker</h1>
+<p class="muted" style="margin:0 0 1.2rem;max-width:52rem">
+  Upload the spreadsheet tracker (<code>.xlsx</code>, all month sheets) or the CSV converted from it.
+  You'll see exactly what would change before anything does. Statuses only ever move forward,
+  through the normal status-change process with a comment at each step — if an advisory has already
+  been moved further in this tool, the tool wins. Importing the same file twice changes nothing.
+</p>
+
+{% if result %}
+<div class="notice">
+  Import applied: {{ result.updated }} advisor{{ 'y' if result.updated == 1 else 'ies' }} updated
+  ({{ result.changes }} status change{{ '' if result.changes == 1 else 's' }}),
+  {{ result.comments }} comment{{ '' if result.comments == 1 else 's' }} added,
+  {{ result.kept }} kept as they were in the tool,
+  {{ result.not_found }} tracker row{{ '' if result.not_found == 1 else 's' }} with no matching advisory.
+</div>
+{% endif %}
+
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+<form class="card" method="post" action="/tracker-import/preview" enctype="multipart/form-data"
+      style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap;margin-bottom:1.2rem">
+  <input type="file" name="file" accept=".xlsx,.csv" required>
+  <button type="submit">Preview import</button>
+</form>
+
+{% if preview %}
+{% set plan = preview.plan %}
+<div class="stat-grid">
+  <div class="stat-tile tone-good"><span class="value">{{ plan.count(Outcome.UPDATE) }}</span><span class="label">Status will change</span></div>
+  <div class="stat-tile"><span class="value">{{ plan.comments_to_add }}</span><span class="label">Comments to add</span></div>
+  <div class="stat-tile tone-warning"><span class="value">{{ plan.count(Outcome.KEPT) }}</span><span class="label">Kept — tool is further along</span></div>
+  <div class="stat-tile"><span class="value">{{ plan.count(Outcome.NOT_FOUND) }}</span><span class="label">Not in the tool yet</span></div>
+  <div class="stat-tile"><span class="value">{{ plan.count(Outcome.UNCHANGED) }}</span><span class="label">Already up to date</span></div>
+</div>
+
+{% if plan.problems %}
+<div class="error">
+  {{ plan.problems|length }} row{{ '' if plan.problems|length == 1 else 's' }} skipped:
+  <ul style="margin:.3rem 0 0;padding-left:1.2rem">
+    {% for p in plan.problems %}<li>{{ p.source }} — {{ p.message }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div style="display:flex;gap:.8rem;align-items:center;margin:0 0 1rem;flex-wrap:wrap">
+  {% if plan.count(Outcome.UPDATE) or plan.comments_to_add %}
+  <form method="post" action="/tracker-import/apply" style="margin:0">
+    <input type="hidden" name="blob_id" value="{{ preview.blob_id }}">
+    <button type="submit">Apply import</button>
+  </form>
+  {% else %}
+  <span class="muted">Nothing to apply — everything is already up to date.</span>
+  {% endif %}
+  <a href="/tracker-import/{{ preview.blob_id }}/csv">Download as CSV</a>
+  <span class="muted" style="font-size:.85rem">— to check or correct statuses in a spreadsheet, then upload the CSV instead</span>
+</div>
+
+<div class="card" style="padding:0;overflow-x:auto">
+<table class="tracker">
+  <thead>
+    <tr><th>Advisory</th><th>In the tool</th><th>Tracker says</th><th>What will happen</th><th>Comment</th></tr>
+  </thead>
+  <tbody>
+  {% for c in changes %}
+    <tr style="cursor:default">
+      <td class="col-title">
+        {% if c.advisory_id %}<a class="ref" href="/advisories/{{ c.advisory_id }}">{{ c.entry.ref }}</a>
+        {% else %}<span class="ref">{{ c.entry.ref }}</span>{% endif %}
+        <span class="title">{{ c.advisory_title or c.entry.subject or '—' }}</span>
+        <span class="muted" style="font-size:.75rem">{{ c.entry.source }}</span>
+      </td>
+      <td>{% if c.current %}{{ status_badge(c.current) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>
+        {% if c.entry.status %}{{ status_badge(c.entry.status) }}
+          <div class="muted" style="font-size:.75rem;margin-top:.2rem">{{ c.entry.reason }}</div>
+        {% else %}<span class="muted">No status</span>{% endif %}
+      </td>
+      <td style="font-size:.85rem">
+        {% if c.outcome == Outcome.UPDATE %}
+          <strong>Change status</strong>
+          {% if c.path|length > 1 %}<div class="muted" style="font-size:.75rem">via {{ c.path | map(attribute='value') | join(' → ') }}</div>{% endif %}
+        {% elif c.outcome == Outcome.COMMENT_ONLY %}Add comment
+        {% elif c.outcome == Outcome.KEPT %}<span style="color:var(--status-warning)">Keep tool's status</span>
+        {% elif c.outcome == Outcome.NOT_FOUND %}<span class="muted">Not in the tool — skipped</span>
+        {% elif c.outcome == Outcome.UNCHANGED %}<span class="muted">Already up to date</span>
+        {% else %}<span class="muted">Nothing to import</span>{% endif %}
+        {% if c.note %}<div class="muted" style="font-size:.75rem">{{ c.note }}</div>{% endif %}
+      </td>
+      <td class="last-comment" style="white-space:pre-wrap;max-width:22rem">{{ c.entry.comment or '—' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+<details style="margin-top:1.5rem">
+  <summary class="muted" style="cursor:pointer">How tracker text becomes a status</summary>
+  <p class="muted" style="font-size:.85rem;max-width:52rem">
+    The "Comments" and "Action Taken by MCME Infosec" columns are read together; the first rule that
+    matches wins. Text no rule recognises (or a blank action) changes no status — the comment is still added.
+  </p>
+  <table class="product-table" style="max-width:40rem">
+    <thead><tr><th>#</th><th>Tracker text</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for r in rules %}
+      <tr><td>{{ loop.index }}</td><td>{{ r.label }}</td><td>{{ status_badge(r.status) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</details>
+{% endblock %}

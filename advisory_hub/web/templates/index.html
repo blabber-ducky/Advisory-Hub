@@ -3,12 +3,15 @@
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
   <h1 style="font-size:1.3rem;margin:0">Tracker</h1>
   {% if can_scan_inbox %}
-  <form hx-post="/inbox/scan" hx-target="body" hx-swap="none">
-    <button type="submit" hx-indicator="#inbox-scan-indicator">
-      Scan inbox now
-      <span id="inbox-scan-indicator" class="htmx-indicator">&hellip;</span>
-    </button>
-  </form>
+  <div style="display:flex;gap:1rem;align-items:center">
+    <a href="/tracker-import">Import manual tracker</a>
+    <form hx-post="/inbox/scan" hx-target="body" hx-swap="none" style="margin:0">
+      <button type="submit" hx-indicator="#inbox-scan-indicator">
+        Scan inbox now
+        <span id="inbox-scan-indicator" class="htmx-indicator">&hellip;</span>
+      </button>
+    </form>
+  </div>
   {% endif %}
 </div>
 

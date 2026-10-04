@@ -25,6 +25,7 @@ from .web import inventory as web_inventory
 from .web import iocs as web_iocs
 from .web import routes as web_routes
 from .web import tracker as web_tracker
+from .web import tracker_import as web_tracker_import
 
 log = get_logger(__name__)
 
@@ -124,6 +125,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(web_routes.router)
     app.include_router(web_tracker.router)
+    app.include_router(web_tracker_import.router)
     app.include_router(web_inventory.router)
     app.include_router(web_affected_software.router)
     app.include_router(web_iocs.router)

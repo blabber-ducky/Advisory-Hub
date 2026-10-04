@@ -56,6 +56,7 @@ stack itself only speaks HTTP; see §7.
 | `create-token` | Mint a scoped API token — **shown once** |
 | `list-users` | List accounts and roles |
 | `check` | Verify database, blob volume, inbox, and schema |
+| `tracker-to-csv <file.xlsx> [-o out.csv]` | Convert the manual tracker workbook into the editable import CSV (status + comment per advisory). No database needed. See architecture.md §3.3.3 |
 
 ## 1. Containers
 

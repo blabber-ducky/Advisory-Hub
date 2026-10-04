@@ -1094,6 +1094,46 @@ D-035, D-037, D-038 and D-040 are kept as history, marked superseded or
 amended; the progress log in CLAUDE.md likewise records the proxy as it
 was.
 
+## D-042 — Manual tracker import: rule-inferred statuses, previewed, forward-only, through `change_status()`
+
+**Date:** 2026-10-04 · **Status:** Accepted
+
+**Requested**: convert the team's multi-sheet spreadsheet tracker into one
+CSV, with everything the tool doesn't already parse in the comments; and an
+option in the tool to upload it and update advisory statuses accordingly.
+
+**Decision**: `/tracker-import` (ANALYST+) accepts the workbook or the
+converted CSV, previews, then applies. Mechanics and the full rule table:
+architecture.md §3.3.3.
+
+**Choices, and the alternatives rejected**:
+
+| Choice | Rejected alternative, and why |
+|---|---|
+| Statuses inferred by an ordered, documented rule table; unrecognised text changes nothing | Asking the user to map 46 free-text phrasings by hand first — slower and no better: the preview shows every inference, and the CSV lets any of them be corrected |
+| A preview step that writes nothing | Applying on upload — status history is permanent (append-only audit log), so a bad mapping would be unfixable |
+| Walk legal transitions through `change_status()` | Writing the target status directly — bypasses the mandatory comment and audit chokepoint (CLAUDE.md §2.2) |
+| Intermediate steps restricted to Triaged / In progress / Remediated | Plain shortest path — tested: it routed NEW → Remediated through **Awaiting vendor** (alphabetical tie-break), recording a vendor wait that never happened |
+| Forward-only; the tool wins on disagreement | Tracker wins — would let an old spreadsheet undo work done in the tool |
+| Workbook *and* CSV accepted, through one converter | Workbook only (no way to correct an inference) or CSV only (an extra manual step every time) |
+| Own `defusedxml` reader (`manual_tracker/xlsx.py`) | openpyxl — a large dependency for parsing an uploaded file; the existing sidecar reader reads only the first sheet and shifts columns at blank cells |
+
+**Assumptions to confirm with the team** — each is one line in
+`STATUS_RULES`:
+
+- Auto-patching in place, hashes blocked, and "closed — automation job in
+  place" count as **Remediated**.
+- "No blocking mechanism available" means **Risk accepted**.
+- Partial blocking ("Blocked Hashes, no blocking mechanism for IP and
+  Domain") counts as **Remediated**; the caveat stays in the comment.
+- "Assessment required" / "Need more information" mean **Triaged**.
+
+**Verified on real data** (a throwaway copy of the dev database, dropped
+afterwards): the real workbook's 174 rows read identically to openpyxl,
+every field and date. Through the actual web upload, 97 advisories updated
+via 135 legal status steps; re-importing changed nothing; re-issued
+DOH-2026591 updated on both records. 64 new tests.
+
 ---
 
 ## Open decisions

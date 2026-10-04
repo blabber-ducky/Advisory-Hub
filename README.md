@@ -34,6 +34,7 @@ and the progress log in [CLAUDE.md](CLAUDE.md) §4.
 | Mediclinic light/dark theme, production compose file | Added |
 | MCP server for external dashboards and agent integrations | 3 |
 | Stats/reporting endpoints, SLA tracking, exports | 3 |
+| Import the manual spreadsheet tracker (statuses + comments), with preview | Added |
 
 ## Documentation
 

@@ -260,6 +260,41 @@ def cmd_enrich(args: argparse.Namespace) -> int:
     return 130 if interrupted else 0
 
 
+def cmd_tracker_to_csv(args: argparse.Namespace) -> int:
+    """Convert the manual tracker workbook into the editable import CSV.
+
+    Needs no database: the same conversion the web import's "Download as
+    CSV" does, for checking or correcting statuses before importing.
+    """
+    from collections import Counter
+    from pathlib import Path
+
+    from .core.services.tracker_import import (
+        TrackerImportError,
+        entries_from_upload,
+        entries_to_csv,
+    )
+
+    source = Path(args.path)
+    try:
+        entries, problems = entries_from_upload(source.read_bytes(), source.name)
+    except (OSError, TrackerImportError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    target = Path(args.output) if args.output else source.with_suffix(".csv")
+    # BOM so Excel opens it as UTF-8 (subjects contain "—" and similar).
+    target.write_text(entries_to_csv(entries), encoding="utf-8-sig")
+
+    print(f"Wrote {len(entries)} rows to {target}")
+    counts = Counter(e.status.value if e.status else "(no change)" for e in entries)
+    for status, n in counts.most_common():
+        print(f"  {n:4}  {status}")
+    for problem in problems:
+        print(f"  ! {problem.source}: {problem.message}", file=sys.stderr)
+    return 0
+
+
 def cmd_check(_args: argparse.Namespace) -> int:
     from .core.storage.blobs import FilesystemBlobStore
 
@@ -325,6 +360,13 @@ def main() -> int:
     p.add_argument("--limit", type=int, help="Maximum CVE rows to process")
     p.add_argument("--force", action="store_true", help="Re-enrich even fresh records")
     p.set_defaults(func=cmd_enrich)
+
+    p = sub.add_parser(
+        "tracker-to-csv", help="Convert the manual tracker workbook into the import CSV"
+    )
+    p.add_argument("path", help="Tracker .xlsx (or an existing import CSV, to re-check it)")
+    p.add_argument("-o", "--output", help="Output CSV (default: next to the input)")
+    p.set_defaults(func=cmd_tracker_to_csv)
 
     p = sub.add_parser("check", help="Verify database, storage, and configuration")
     p.set_defaults(func=cmd_check)

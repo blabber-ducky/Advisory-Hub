@@ -116,6 +116,10 @@ swaps. No Node build step, one deployable, one language.
   sweep — the same function the poller and `advisory-hub watch` call, safe
   to run concurrently since `Inbox.claim()`'s atomic rename means only one
   caller ever wins a given file.
+- **Import manual tracker** (`/tracker-import`, ANALYST+, linked from the
+  tracker page): upload the team's spreadsheet tracker (`.xlsx`) or the CSV
+  converted from it, preview, then apply — statuses and comments brought
+  into the tool. See §3.3.3.
 - **Inventory** (`/inventory`): source configuration, CSV upload, sync history.
 - **Affected Software** (`/affected-software`): one row per product match from
   each advisory's most recent completed scan — Product · Version · Affected
@@ -200,6 +204,84 @@ default the theme follows the operating system. The toggle in the header
 stores the choice in the browser's `localStorage` (`ah-theme`) — per
 browser, nothing server-side. A pinned choice is applied by a small inline
 script in `<head>` before first paint, so there is no light-to-dark flash.
+
+#### 3.3.3 Importing the manual tracker
+
+Before this tool, advisories were tracked in a spreadsheet: one sheet per
+month, plus "Summary" and "Pending Actions" sheets that are formulas over
+the month sheets. The import brings that history in.
+
+**What's read.** Every sheet with both an *Advisory No.* and an *Action
+Taken by MCME Infosec* column. The roll-up sheets have neither, so they're
+skipped. Columns are matched by header name, not position, because the
+month sheets don't share a layout (September dropped *Sender*, *Action
+Required* and *Summary*; July has no *Comments*). The workbook reader is
+`manual_tracker/xlsx.py`: `defusedxml`, size-checked before decompression,
+cells placed by their cell reference so blank cells don't shift columns.
+
+**What becomes a comment.** Only what the tool doesn't already extract from
+the email and PDF — *MCME Owner*, *Action Taken by MCME Infosec* and
+*Comments*:
+
+```
+From manual tracker (August 2026):
+Owner: Systems Team
+Action taken: Ticket raised : 940435
+Notes: Compensating control for vcenter
+```
+
+Subject, dates, sender, products/versions, CVEs, risk level, type, summary
+and IOC availability are all parsed by the tool already, so they aren't
+repeated.
+
+**How tracker text becomes a status.** *Comments* and *Action Taken* are read
+together; the first rule that matches wins (`core.services.tracker_import.STATUS_RULES`):
+
+| # | Tracker text (examples) | Status |
+|---|---|---|
+| 1 | "Resolved and Fixed" | Remediated |
+| 2 | "Closed with comments that automation Job in place" | Remediated |
+| 3 | "Duplicate of DOH-2026599" | Not applicable |
+| 4 | "Not Applicable", "General Information", "Generic advisory" | Not applicable |
+| 5 | "Raised as a risk already" | Risk accepted |
+| 6 | "…closed with IT recommendations will upgrade after stable version" | Awaiting vendor |
+| 7 | "Ticket raised : 969675, In progress" | In progress |
+| 8 | "Hash Blocked : 04555296", "Blocked Hashes" | Remediated |
+| 9 | "No Blocking mechanisom available" | Risk accepted |
+| 10 | "Auto Patching is in Place", "Autopatching" | Remediated |
+| 11 | "Ticket raised : 940435" | In progress |
+| 12 | "Assessment required", "Need more informaiton", "Need to raise ticket", "Bulk Vulnerabilities" | Triaged |
+| — | Blank, or anything else (e.g. "Pending response from …") | **No status change** — the comment is still added |
+
+The order matters, and tests pin it: a Comments verdict ("Resolved and
+Fixed") outranks the "Ticket raised" beside it; "closed … will upgrade after
+stable version" is checked before the plain "ticket raised" it contains; a
+duplicate is not applicable even if it also mentions patching. Patterns
+accept the tracker's real misspellings. The rule that fired is shown next to
+every proposed status in the preview — it's an inference, not a fact
+(CLAUDE.md §2.2).
+
+**How a status is applied.**
+
+| Rule | Why |
+|---|---|
+| Every change goes through `change_status()`, one legal transition at a time, each with a comment | The single chokepoint (§4.2). NEW → Remediated is recorded as NEW → Triaged → In progress → Remediated |
+| Intermediate steps only ever pass through Triaged / In progress / Remediated | Passing through Awaiting vendor, Risk accepted or Not applicable would record history that never happened. Acknowledged is never used — it needs an acknowledgement channel the tracker doesn't record |
+| Only forward. If the tool already has a status as far along (or further), the tool wins — "Kept" in the preview | Once someone works an advisory in the tool, an old spreadsheet mustn't undo it |
+| Matched on advisory number; every record with that number is updated | The regulator re-issues advisories under the same number |
+| Rows with no matching advisory are reported, not created | Advisories come from email only. Re-import after they're ingested |
+| Re-importing the same file changes nothing and posts no duplicate comments | Safe to run again, e.g. monthly while both are in use |
+| Preview writes nothing; Apply is one transaction | All or nothing |
+
+**Editing before importing.** "Download as CSV" on the preview, or
+`advisory-hub tracker-to-csv` (operations.md, CLI), gives one flat CSV —
+`advisory_ref, received_date, subject, status, comment, source` — with the
+proposed status and comment filled in. Correct the `status` column (any tool
+status, or blank for no change) or the comment, and upload the CSV instead
+of the workbook. Statuses in the CSV are taken as written; an unknown value
+skips that row with a message rather than being guessed.
+
+Web-only for now: there's no REST endpoint for the import.
 
 ### 3.4 `api/` — REST
 
