@@ -7,7 +7,7 @@ endpoint inventory to answer "are we actually affected?"
 
 **Status:** Phases 0–2 complete (ingestion, enrichment, tracker, REST API,
 inventory sources and scanning), plus VirusTotal IOC checks, the IOC and
-Affected Software tabs, an admin panel, HTTPS and a production compose file.
+Affected Software tabs, an admin panel and a production compose file.
 Phase 3 (MCP server, reporting) is next. See [docs/roadmap.md](docs/roadmap.md)
 and the progress log in [CLAUDE.md](CLAUDE.md) §4.
 
@@ -31,7 +31,7 @@ and the progress log in [CLAUDE.md](CLAUDE.md) §4.
 | IOC tab (remediation status, CSV export) and rate-limited bulk VirusTotal checks | Added |
 | Affected Software tab: every product match across the estate | Added |
 | Admin panel: NVD / VirusTotal keys without a restart | Added |
-| HTTPS, Mediclinic light/dark theme, production compose file | Added |
+| Mediclinic light/dark theme, production compose file | Added |
 | MCP server for external dashboards and agent integrations | 3 |
 | Stats/reporting endpoints, SLA tracking, exports | 3 |
 
@@ -49,7 +49,7 @@ Start here, in order:
 | [docs/roadmap.md](docs/roadmap.md) | Phased delivery plan with acceptance criteria |
 | [docs/decisions.md](docs/decisions.md) | Settled technical decisions and why |
 | [docs/deployment.md](docs/deployment.md) | **Production install, upgrade, rollback** with `docker-compose.prod.yml` |
-| [docs/operations.md](docs/operations.md) | Config reference, backup, runbooks, TLS, image publishing |
+| [docs/operations.md](docs/operations.md) | Config reference, backup, runbooks, image publishing |
 
 [CLAUDE.md](CLAUDE.md) holds standing instructions and the running progress log.
 
@@ -57,7 +57,8 @@ Start here, in order:
 
 Python 3.13+ · FastAPI · PostgreSQL 16 · SQLAlchemy 2 + Alembic · Jinja2 + HTMX
 (hand-written CSS, no framework) · Redis + RQ for background work · Docker
-Compose, nginx for TLS. No Node toolchain required.
+Compose. No Node toolchain required. TLS is terminated by your enterprise
+WAF / reverse proxy, not by the stack.
 
 ## Quick start (development)
 
@@ -79,14 +80,14 @@ reload, console logs).
 ### Production
 
 Use **`docker-compose.prod.yml`** and follow
-[docs/deployment.md](docs/deployment.md). It pulls pinned images that CI
-publishes to Docker Hub (`advisory-hub`, `advisory-hub-proxy`), serves
-HTTPS only, keeps the database and queue off the network, runs migrations
-automatically, and refuses to start with any secret unset.
+[docs/deployment.md](docs/deployment.md). It pulls the pinned image CI
+publishes to Docker Hub (`advisory-hub`), runs behind your enterprise WAF /
+reverse proxy (which terminates TLS), keeps the database and queue off the
+network, runs migrations automatically, and refuses to start with any
+required value unset.
 
 ```bash
 cp .env.production.example .env        # fill in every CHANGE_ME
-scripts/https-setup.sh install --cert … --key … --server-name …
 docker compose pull && docker compose up -d
 ```
 

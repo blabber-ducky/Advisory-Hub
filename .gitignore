@@ -6,10 +6,6 @@ Inventory/
 data/
 .env
 
-# TLS material — installed per deployment by scripts/https-setup.sh, never committed
-certs/
-*.key
-*.csr
 __pycache__/
 *.pyc
 .venv/

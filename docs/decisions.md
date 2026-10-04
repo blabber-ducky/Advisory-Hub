@@ -797,7 +797,7 @@ worker container and a real configured VirusTotal key.
 
 ## D-035 — HTTPS is a compose overlay with an nginx proxy; certificates are installed per deployment, never generated or stored in the repo
 
-**Date:** 2026-09-29 · **Status:** Accepted
+**Date:** 2026-09-29 · **Status:** Superseded by D-041 (bundled HTTPS proxy removed, 2026-10-04)
 
 **Requested**: an HTTPS option, *without* generating any certificates as
 part of the change, plus a script to use at deployment time.
@@ -887,7 +887,7 @@ tracker's "No comments yet" placeholder was styled with the *border* colour
 
 ## D-037 — Images are built by CI and pulled from Docker Hub; two images, namespace from config
 
-**Date:** 2026-09-29 · **Status:** Accepted
+**Date:** 2026-09-29 · **Status:** Accepted, amended by D-041 (the `advisory-hub-proxy` image no longer exists — one image only)
 
 **Requested**: CI builds the images and pushes them to Docker Hub with
 appropriate names; compose pulls from Docker Hub.
@@ -929,7 +929,7 @@ CI run and push — needs the Docker Hub secrets set on the GitHub repo.
 
 ## D-038 — A separate, self-contained production compose file
 
-**Date:** 2026-09-29 · **Status:** Accepted
+**Date:** 2026-09-29 · **Status:** Accepted, amended by D-041 (no bundled proxy; `app` is the published service)
 
 **Requested**: a production-ready Docker Compose file.
 
@@ -997,7 +997,7 @@ would make builds reproducible; not done here.
 
 ## D-040 — A second, self-contained production compose file for deployments behind an enterprise WAF/reverse proxy
 
-**Date:** 2026-10-01 · **Status:** Accepted
+**Date:** 2026-10-01 · **Status:** Accepted, amended by D-041 (now the only production file, renamed `docker-compose.prod.yml`)
 
 **Requested**: a production deployment option without the bundled nginx
 proxy, for sites that terminate TLS at an enterprise WAF or reverse proxy
@@ -1049,6 +1049,50 @@ the no-proxy file's `.env` while leaving `--help` usable regardless of
 proxy was available to test against; the request/response contract
 (forwarded headers, trust boundary) is rechecked against whichever product
 is actually used before go-live.
+
+## D-041 — Bundled HTTPS reverse proxy removed; TLS is terminated upstream only
+
+**Date:** 2026-10-04 · **Status:** Accepted · **Supersedes** D-035
+
+**Requested**: "remove the https reverse proxy option altogether", including
+its documentation.
+
+**Decision**: the stack no longer ships any TLS component. Production is
+the WAF-fronted design from D-040, and that is now the only production
+file.
+
+| Removed | Was |
+|---|---|
+| `docker/nginx/` (Dockerfile + site template) | The `advisory-hub-proxy` image (D-035, D-037) |
+| `docker-compose.https.yml` | HTTPS overlay for the base stack |
+| `scripts/https-setup.sh` | Certificate CSR / install / check script |
+| `proxy` service in `docker-compose.prod.yml` | TLS-terminating front of the bundled production stack (D-038) |
+| CI's `advisory-hub-proxy` build | Second image in the publish job — CI now builds one image |
+| `certs/` / `*.key` / `*.csr` in `.gitignore`; `SERVER_NAME`, `HTTP_PORT`, `HTTPS_PORT`, `TLS_CERT_DIR`, `HSTS_MAX_AGE` | Settings only the proxy used |
+
+| Renamed | To |
+|---|---|
+| `docker-compose.prod.no-proxy.yml` | `docker-compose.prod.yml` |
+| `.env.production.no-proxy.example` | `.env.production.example` |
+
+Keeping a `no-proxy` name with no proxy alternative would only invite the
+question "where is the other one?".
+
+**What stays, and why it matters more now**: with no bundled proxy, `app`'s
+port is always the published service, so D-040's controls are the security
+boundary in every deployment — `TRUSTED_PROXY_IPS` required (never `*`),
+`SESSION_COOKIE_SECURE` forced on (users must arrive over HTTPS via the
+WAF), and the firewall restricting `APP_PORT` to the WAF. All in
+deployment.md §1.
+
+**Consequence**: there's no supported way to run HTTPS without an external
+TLS terminator. A deployment without one would serve plain HTTP, and
+sign-in wouldn't work (the `Secure` cookie isn't sent over HTTP). That's
+deliberate — the alternative is session cookies on the wire in clear text.
+
+D-035, D-037, D-038 and D-040 are kept as history, marked superseded or
+amended; the progress log in CLAUDE.md likewise records the proxy as it
+was.
 
 ---
 

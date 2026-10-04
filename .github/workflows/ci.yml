@@ -41,7 +41,6 @@ jobs:
           # Explicit -f everywhere: .env's COMPOSE_FILE would otherwise win.
           docker compose -f docker-compose.prod.yml config -q
           docker compose -f docker-compose.yml -f docker-compose.override.yml config -q
-          docker compose -f docker-compose.yml -f docker-compose.https.yml config -q
           rm .env
 
   test:
@@ -96,26 +95,18 @@ jobs:
           fi
           rm -f migrations/versions/drift_drift_check.py
 
-  images:
-    name: Image — ${{ matrix.image }}
-    # Pull requests build both images to prove they still build, but never
-    # push (and fork PRs have no secrets anyway). Pushes to main and v* tags
-    # publish, and only after lint + tests pass.
+  image:
+    name: Image — advisory-hub
+    # app + worker: one image, different command (docker-compose.yml).
+    # Pull requests build it to prove it still builds, but never push (and
+    # fork PRs have no secrets anyway). Pushes to main and v* tags publish,
+    # and only after lint + tests pass.
     needs: [lint, test]
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # app + worker: same image, different command (docker-compose.yml).
-          - image: advisory-hub
-            dockerfile: docker/Dockerfile
-          # TLS proxy for the HTTPS overlay, site config baked in.
-          - image: advisory-hub-proxy
-            dockerfile: docker/nginx/Dockerfile
     env:
+      IMAGE: advisory-hub
       PUSH: ${{ github.event_name == 'push' }}
       # Docker Hub user/org to publish under. Set the repository variable
       # DOCKERHUB_NAMESPACE for an org; otherwise the login username is used.
@@ -146,7 +137,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: docker.io/${{ env.NAMESPACE }}/${{ matrix.image }}
+          images: docker.io/${{ env.NAMESPACE }}/${{ env.IMAGE }}
           # main    → latest, main, sha-<7>
           # v1.4.0  → 1.4.0, 1.4, sha-<7>
           # PR      → pr-<n> (built, not pushed)
@@ -158,12 +149,12 @@ jobs:
             type=sha,prefix=sha-,enable=${{ github.event_name == 'push' }}
             type=ref,event=pr
           labels: |
-            org.opencontainers.image.title=${{ matrix.image }}
+            org.opencontainers.image.title=${{ env.IMAGE }}
 
       - uses: docker/build-push-action@v6
         with:
           context: .
-          file: ${{ matrix.dockerfile }}
+          file: docker/Dockerfile
           # amd64 for servers; arm64 so Apple-silicon test hosts can pull too.
           platforms: linux/amd64,linux/arm64
           push: ${{ env.PUSH == 'true' }}
@@ -171,5 +162,5 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           provenance: mode=max
           sbom: true
-          cache-from: type=gha,scope=${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          cache-from: type=gha,scope=${{ env.IMAGE }}
+          cache-to: type=gha,mode=max,scope=${{ env.IMAGE }}

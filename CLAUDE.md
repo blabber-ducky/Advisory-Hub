@@ -115,12 +115,10 @@ advisory_hub/
 docs/              # deployment.md is the production guide
 migrations/
 tests/
-docker/            # Dockerfile (app+worker image); nginx/ (TLS proxy image + site template)
-scripts/           # https-setup.sh — certificate install at deployment time
+docker/            # Dockerfile (app + worker + migrate image)
 docker-compose.yml           # base stack (pulls images)
 docker-compose.override.yml  # dev: builds locally, reload — auto-applied
-docker-compose.https.yml     # overlay: TLS proxy on the base stack (non-production)
-docker-compose.prod.yml      # production, self-contained — see docs/deployment.md
+docker-compose.prod.yml      # production, self-contained, behind your WAF — see docs/deployment.md
 .env.example / .env.production.example
 ```
 
@@ -129,6 +127,36 @@ docker-compose.prod.yml      # production, self-contained — see docs/deploymen
 ## 4. Progress log
 
 Newest first. Update this when work lands.
+
+### 2026-10-04 — Bundled HTTPS reverse proxy removed
+- **On request** ("remove the https reverse proxy option altogether … remove
+  the mentions in documentation as well"). Deleted `docker/nginx/`,
+  `docker-compose.https.yml`, `scripts/https-setup.sh`, the `proxy` service,
+  CI's `advisory-hub-proxy` build, and the proxy-only settings
+  (`SERVER_NAME`, `HTTP(S)_PORT`, `TLS_CERT_DIR`, `HSTS_MAX_AGE`, `certs/`
+  ignores). D-041.
+- The WAF-fronted design (D-040) is now the **only** production setup:
+  `docker-compose.prod.no-proxy.yml` → `docker-compose.prod.yml`,
+  `.env.production.no-proxy.example` → `.env.production.example`. TLS is
+  always terminated upstream; `TRUSTED_PROXY_IPS` is required.
+- Docs rewritten to match: `docs/deployment.md` (one path, WAF requirements
+  table, verification incl. a firewall check and real-client-IP check),
+  `docs/operations.md` (§7 is now "TLS is terminated upstream"; numbering
+  kept so §8 references still hold), `README.md`, `docs/architecture.md`,
+  `.env.example` (now documents `TRUSTED_PROXY_IPS`, which it lacked).
+  Two inaccuracies carried over from the D-040 docs fixed: the session
+  cookie's `Secure` flag is a fixed setting, not derived from
+  `X-Forwarded-Proto`; and client IPs are checked in `audit_log.ip_address`,
+  not on `/admin`. History kept: D-035 marked superseded, D-037/D-038/D-040
+  amended; older progress-log entries below describe the proxy as it was.
+- **Verified**: ran the new `docker-compose.prod.yml` for real (local
+  image): missing `TRUSTED_PROXY_IPS` refuses to start; app/worker healthy;
+  only `app` published; health 204 on `APP_PORT`. Forwarded-header trust
+  tested end to end through a real sign-in: a forged `X-Forwarded-For` from
+  an untrusted peer was ignored (audit log: real peer IP), and the same
+  header from a peer listed in `TRUSTED_PROXY_IPS` was honoured. CI's
+  compose step passes as written; `actionlint` clean; 594 tests pass;
+  `ruff`/`mypy --strict` clean. Test stack and volumes removed.
 
 ### 2026-10-01 — Production deployment option without the bundled proxy
 - **On request** ("a production deployment option without proxy ... use an
