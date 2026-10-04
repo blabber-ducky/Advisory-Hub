@@ -303,6 +303,11 @@ own. See [api-and-mcp.md](api-and-mcp.md).
 | Blob volume | Original `.eml`, attachments, extracted text — keyed by SHA-256 | Immutable, deduplicated, re-parseable |
 | Redis | RQ job queue, NVD response cache, rate-limit counters | Ephemeral by design |
 
+On disk, all three live in host folders under `./data/<volume>` beside the
+compose file (`pgdata`, `blobs`, `redisdata`, plus `inbox`, `processing`,
+`archive`, `failed` for ingestion), so backup and restore are file
+operations on one directory — operations.md §2 and §4, D-043.
+
 ## 4. Key flows
 
 ### 4.1 Ingestion

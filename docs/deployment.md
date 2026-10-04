@@ -42,6 +42,7 @@ the session cookie is always `Secure`, so sign-in only works over HTTPS.
 |---|---|---|---|
 | `app` | `<namespace>/advisory-hub` | **`APP_PORT`** (default 8000) — the only published port | uvicorn, `WEB_CONCURRENCY` processes (default 1) |
 | `worker` | same image | no | Inbox, NVD and inventory-sync pollers + RQ jobs |
+| `init-data` | same image | no | One-shot, first: creates `./data/<volume>` and sets ownership; no network, only file-ownership privileges |
 | `migrate` | same image | no | One-shot, every `up`; app/worker wait for it to succeed |
 | `postgres` | `postgres:16-alpine` | no | Backend network only — cannot reach the internet |
 | `redis` | `redis:7-alpine` | no | Queue, not cache: AOF persistence, `noeviction` |
@@ -58,6 +59,7 @@ the session cookie is always `Secure`, so sign-in only works over HTTPS.
 | Forwarded headers trusted only from `TRUSTED_PROXY_IPS` | app | `app`'s port is reachable by whatever the firewall allows; trusting every peer (`*`) would let anyone who can reach it spoof `X-Forwarded-For`/`-Proto` and poison the audit log. See D-040 |
 | Memory/CPU limits | every service | One runaway PDF can't starve the database. Worker 2 GB, app 1 GB, postgres 2 GB, redis 512 MB |
 | Log rotation (20 MB × 5 per container) | every service | Logs can't fill the disk |
+| All data in `./data/<volume>` host folders | every service | Backup and restore are file operations on one directory (operations.md §4) |
 | Required values, no defaults | `SECRET_KEY`, `POSTGRES_PASSWORD`, `FERNET_KEY`, `IMAGE_NAMESPACE`, `IMAGE_TAG`, `TRUSTED_PROXY_IPS` | The stack refuses to start rather than run with a development value |
 | Pinned image tag, no `latest` default | app, worker, migrate | Every host runs a known build; upgrades are deliberate |
 
@@ -78,7 +80,7 @@ boundary:
 | Need | Detail |
 |---|---|
 | Linux host with Docker Engine + Compose plugin | Compose **≥ 2.24**. `docker compose version` |
-| CPU / RAM / disk | 2 vCPU, 4 GB RAM minimum. Disk: the blob, archive and database volumes grow with every advisory — start with 50 GB and monitor (operations.md §6) |
+| CPU / RAM / disk | 2 vCPU, 4 GB RAM minimum. Disk: `./data/` (database, blobs, archive) grows with every advisory — put the deployment folder on a disk with room, start with 50 GB and monitor (operations.md §6) |
 | WAF / reverse proxy | Terminating TLS for the users' hostname (e.g. `advisoryhub.corp.example`), with this host as its backend |
 | The WAF's own IP address(es) | For `TRUSTED_PROXY_IPS` — every address it connects *from*, e.g. both nodes of an HA pair |
 | Inbound | `APP_PORT` from the WAF only — firewalled from everything else |
@@ -88,13 +90,23 @@ boundary:
 
 ## 3. First install
 
-Only two files are needed on the host — not the source tree:
+Only two files are needed on the host — not the source tree. The data
+folders are created on first start:
 
 ```
 /opt/advisory-hub/
   docker-compose.prod.yml
   .env                       ← from .env.production.example
+  data/                      ← created by init-data: pgdata, redisdata, blobs,
+                               inbox, processing, archive, failed
 ```
+
+**Everything the stack stores is in `/opt/advisory-hub/data/`.** Back it up
+together with `.env` (operations.md §4).
+
+If this host ran an older version that used Docker named volumes, copy them
+into `./data` first (operations.md §4, "Moving an existing stack").
+Otherwise the stack starts with an empty database.
 
 ```bash
 # 1. Fetch the files for the release you're deploying (tag v1.4.0 here).
@@ -193,7 +205,9 @@ the old version serving untouched: read the output, fix or roll back
 | Logs | `docker compose logs -f app worker` (JSON; rotated at 20 MB × 5) |
 | CLI | `docker compose exec app python -m advisory_hub.cli <command>` (operations.md, CLI table) |
 | Restart one service | `docker compose restart worker` |
-| Stop everything | `docker compose down` — **never `down -v`**, which deletes the database and blob volumes |
+| Stop everything | `docker compose down` — data in `./data/` is untouched |
+| Back up | Stop, archive `./data/`, start — or a no-downtime `pg_dump` + file sync (operations.md §4) |
+| Restore | operations.md §4 — same `.env` as the backup |
 
 Certificates, renewals and TLS settings are managed on the WAF, not here.
 
@@ -208,6 +222,8 @@ Certificates, renewals and TLS settings are managed on the WAF, not here.
 | Sign-in loops back to the sign-in page | You're reaching the app over plain HTTP (directly, or via a WAF listener without TLS). The session cookie is always `Secure` and browsers won't send it over HTTP — go through the WAF's HTTPS address |
 | Audit log / sessions show the WAF's own IP for every user | `TRUSTED_PROXY_IPS` doesn't match the address the WAF actually connects from (an HA pair with two egress IPs, or the WAF behind its own NAT) — add every address it can appear as |
 | `app` reachable directly, bypassing the WAF | Firewall gap, not a stack bug — `APP_PORT` must be unreachable except from the WAF's network path |
-| Emails sit in the inbox folder | Check the worker log for `Exception in thread`; `INBOX_HOST_PATH` must be an absolute path the container user (uid 10001) can write |
+| Emails sit in the inbox folder | Check the worker log for `Exception in thread`. If `INBOX_HOST_PATH` is set, it must be an absolute path the container user (uid 10001) can write — `init-data` only manages `./data` |
+| `Permission denied` under `/data/...` in app/worker logs | `init-data` didn't run or failed — `docker compose logs init-data`. It needs to start as root with the `CHOWN` capability; check nothing (e.g. rootless Docker or a user-namespace remap) prevents that |
+| Database empty after an upgrade | The host used Docker named volumes before; `./data/pgdata` started fresh. Stop, copy the old volumes in (operations.md §4, "Moving an existing stack"), start |
 | Integrations fail with SSRF errors | Host not in `OUTBOUND_ALLOWLIST` |
 | `Read-only file system` in a log | Something wrote outside `/tmp` or `/data/*` — a bug worth reporting, not a reason to drop `read_only` |

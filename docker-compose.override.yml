@@ -13,6 +13,10 @@ x-local-build: &local-build
   pull_policy: build
 
 services:
+  # Same image as app/worker, so it's built here too rather than pulled.
+  init-data:
+    <<: *local-build
+
   postgres:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"

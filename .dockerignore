@@ -1,0 +1,27 @@
+# Keep the build context to what docker/Dockerfile actually COPYs.
+#
+# data/ matters most: the dev stack keeps Postgres, Redis and the blob store
+# under ./data/<volume>, and Postgres's files there aren't readable by the
+# user running `docker build` on Linux — without this, the build fails
+# sending its context. The restricted corpus (CLAUDE.md §6) and real
+# inventory/tracker files must never be sent to a build either.
+data/
+Advisory/
+Inventory/
+Test_Files/
+.env
+.env.*
+!.env.example
+!.env.production.example
+.git/
+.github/
+.venv/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+docs/
+tests/
+.DS_Store

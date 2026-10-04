@@ -64,29 +64,55 @@ stack itself only speaks HTTP; see §7.
 |---|---|---|
 | `app` | `<IMAGE_NAMESPACE>/advisory-hub` (`docker/Dockerfile`) | FastAPI: UI, REST API, MCP HTTP transport |
 | `worker` | same image, different command | RQ worker: ingestion, enrichment, inventory sync, scans |
-| `migrate` | same image | **Production files only.** Runs `alembic upgrade head` and exits; `app`/`worker` start only after it succeeds |
-
-Inventory syncs are scheduled by a poller thread inside `worker` — there is
-no separate scheduler container.
+| `migrate` | same image | **Production file only.** Runs `alembic upgrade head` and exits; `app`/`worker` start only after it succeeds |
+| `init-data` | same image | One-shot, first. Creates the `./data/<volume>` folders and gives the app's ones to the image's non-root user (uid 10001); exits. See §2 |
 | `postgres` | `postgres:16-alpine` | System of record |
 | `redis` | `redis:7-alpine` | Job queue, NVD cache, rate limiting |
 
-## 2. Volumes
+Inventory syncs are scheduled by a poller thread inside `worker` — there is
+no separate scheduler container.
 
-| Mount | Purpose | Backed up |
-|---|---|---|
-| `/data/inbox` | Power Automate drop target (also mounted on the Windows/PA side) | No — transient |
-| `/data/processing` | Worker claim area | No |
-| `/data/archive` | Successfully ingested originals | **Yes** |
-| `/data/failed` | Failed ingests + `.error.json` sidecars | **Yes** |
-| `/data/blobs` | Content-addressed store | **Yes — critical** |
-| `pgdata` | PostgreSQL | **Yes — critical** |
+**One project name per stack on a host.** Containers are named after the
+Compose project (`name: advisory-hub` in the compose files). Two stacks on
+one machine with the same project name share container names, so `up` in one
+replaces the other's containers. Give each extra stack its own
+`COMPOSE_PROJECT_NAME` in its `.env` (e.g. `advisory-hub-test`).
 
-**`/data/inbox` is a named volume by default**, isolated inside Docker. Set
-`INBOX_HOST_PATH` (compose-level, not read by the app itself — see §3) to an
-absolute host path to bind-mount a real folder there instead — e.g. one a
-Power Automate flow or a mail rule on this host writes `.msg` files into
-directly. `inbox/` being on a different filesystem than `processing/` this
+## 2. Data folders
+
+**Every compose file keeps all persistent data in host folders under
+`./data/<volume>`** next to the compose file — not in Docker named volumes —
+so backing up and restoring is a file operation on one directory (§4).
+
+| Host folder | Mounted in containers at | Purpose | Back up |
+|---|---|---|---|
+| `./data/pgdata` | `postgres:/var/lib/postgresql/data` | PostgreSQL | **Yes — critical** |
+| `./data/blobs` | `app`, `worker`: `/data/blobs` | Content-addressed store (originals, attachments) | **Yes — critical** |
+| `./data/archive` | `/data/archive` | Successfully ingested originals | **Yes** |
+| `./data/failed` | `/data/failed` | Failed ingests + `.error.json` sidecars | **Yes** |
+| `./data/redisdata` | `redis:/data` | Job queue (AOF/RDB) | Optional — queued jobs only |
+| `./data/inbox` | `/data/inbox` | Watched inbox (unless `INBOX_HOST_PATH` is set) | No — transient |
+| `./data/processing` | `/data/processing` | Worker claim area | No — transient |
+
+**Ownership is handled for you.** The app runs as uid 10001. On Linux,
+Docker creates a missing bind-mount folder owned by root, which the app
+can't write to. The one-shot `init-data` container runs before
+`app`/`worker`, creates every folder, and gives `blobs`, `inbox`,
+`processing`, `archive` and `failed` to uid 10001. It also fixes anything
+not owned by uid 10001, such as files a restore copied back as root.
+Postgres and Redis fix their own folders at startup. On the host you'll
+see uid 10001 (or a raw number) as the owner of those folders on Linux;
+that's expected.
+
+**`./data/` is git-ignored and excluded from Docker builds**
+(`.dockerignore`), so a development checkout can hold real data safely.
+
+**The inbox can live elsewhere.** Set `INBOX_HOST_PATH` (compose-level, not
+read by the app itself — see §3) to an absolute host path to mount another
+folder at `/data/inbox` instead of `./data/inbox` — e.g. one a Power
+Automate flow or a mail rule on this host writes `.msg` files into
+directly. `init-data` only manages `./data`, so uid 10001 must be able to
+write that folder yourself. `inbox/` being on a different filesystem than `processing/` this
 way is handled transparently by `Inbox.claim()` (a cross-device fallback,
 same-filesystem claim-in-place then a copy — see `ingest/watcher.py`'s
 module docstring and docs/decisions.md D-029); no operational difference
@@ -108,7 +134,8 @@ Every variable belongs in `.env.example` with a dummy value and a comment.
 | `FERNET_KEY_PREVIOUS` | no | Set during key rotation — `MultiFernet` tries both keys on decrypt, so rows encrypted under the old key keep working until re-encrypted; remove once rotation is complete |
 | `BLOB_ROOT` | yes | Default `/data/blobs` |
 | `INBOX_PATH` | yes | In-container path, default `/data/inbox` — what the app/worker actually read |
-| `INBOX_HOST_PATH` | no | **Compose-level only, not read by the app.** Absolute host path bind-mounted at `/data/inbox` in place of the internal named volume — set this to point the watcher at a real folder of emails. Unset keeps the named volume. |
+| `INBOX_HOST_PATH` | no | **Compose-level only, not read by the app.** Absolute host path mounted at `/data/inbox` in place of `./data/inbox` — set this to point the watcher at a folder another system writes emails into. Must be writable by uid 10001. |
+| `COMPOSE_PROJECT_NAME` | no | **Compose-level.** Overrides the project name (`advisory-hub`). Set it when more than one stack runs on the same host, or they replace each other's containers (§1) |
 | `INBOX_POLL_SECONDS` | no | Default `30` |
 | `NVD_API_KEY` | recommended | Raises the rate limit from 5 → 50 requests per 30s. **Overridden by an admin-panel-configured key** (`/admin`, ADMIN role) if one is set — see docs/decisions.md D-031. Either way works; the admin panel takes effect immediately, no restart. |
 | `NVD_ENABLED` | no | Default `true`; `false` for air-gapped operation. Also overridable per D-031 — disabling from `/admin` wins over this. |
@@ -133,24 +160,91 @@ Every variable belongs in `.env.example` with a dummy value and a comment.
 | `COMPOSE_FILE` | production | **Compose-level.** Which compose file plain `docker compose …` uses: `docker-compose.prod.yml` in production (set by `.env.production.example`). Also stops `docker-compose.override.yml` being applied. |
 | `LOG_LEVEL` | no | Default `INFO` |
 
-## 4. Backup
+## 4. Backup and restore
 
-Critical set: `pgdata`, `/data/blobs`, `/data/archive`, `/data/failed`, and the
-`FERNET_KEY` (stored separately — in your secrets manager, not next to the DB dump).
+What to keep: **`./data/`** (see the table in §2 — `pgdata`, `blobs`,
+`archive` and `failed` are the ones that matter) and **`.env`**. `.env`
+holds `FERNET_KEY`, without which the integration credentials in the
+database can't be decrypted, and `POSTGRES_PASSWORD`, which the restored
+database will still expect. Store `.env` separately from the data backup,
+e.g. in your secrets manager.
+
+Run these from the folder holding the compose file. On Linux, use `sudo`:
+Postgres's files are only readable by its own user.
+
+### Cold backup — simplest, consistent, a minute of downtime
 
 ```bash
-# Database
-docker compose exec -T postgres pg_dump -U advisory_hub -Fc advisory_hub \
-  > backup/db-$(date +%F).dump
-
-# Blobs — content-addressed, so incremental sync is safe and cheap
-rsync -a --delete /data/blobs/ /backup/blobs/
-rsync -a /data/archive/ /backup/archive/
+docker compose stop                                   # quiesce; containers are kept
+sudo tar -czf /backup/advisory-hub-$(date +%F).tar.gz data/
+docker compose start
 ```
+
+Postgres's data files are only consistent while it's stopped, so copying
+`./data/pgdata` from a *running* stack isn't a valid database backup.
+
+### Hot backup — no downtime
+
+```bash
+# Database: a consistent logical dump while it runs
+docker compose exec -T postgres pg_dump -U advisory_hub -Fc advisory_hub \
+  > /backup/db-$(date +%F).dump
+# Files: content-addressed, so incremental sync is safe and cheap
+sudo rsync -a --delete data/blobs/   /backup/blobs/
+sudo rsync -a          data/archive/ /backup/archive/
+sudo rsync -a          data/failed/  /backup/failed/
+```
+
+### Restore
+
+From a cold backup:
+
+```bash
+docker compose down
+sudo mv data data.before-restore          # keep it until the restore is verified
+sudo tar -xzf /backup/advisory-hub-2026-10-04.tar.gz
+docker compose up -d                      # init-data re-applies ownership
+```
+
+From a hot backup: restore the files into `./data/blobs`, `./data/archive`
+and `./data/failed`. Start the stack with an empty `./data/pgdata`, then
+replace the database with the dump:
+
+```bash
+docker compose stop app worker
+docker compose exec -T postgres pg_restore -U advisory_hub -d advisory_hub --clean --if-exists \
+  < /backup/db-2026-10-04.dump
+docker compose start app worker
+```
+
+Use the **same `.env`** as the backup. `POSTGRES_PASSWORD` is stored inside
+`pgdata`, and `FERNET_KEY` decrypts the stored credentials.
 
 **Restore is not backup.** Exercise a full restore into a scratch environment at
 least once per quarter and record the date. A restore that has never been tried
 is a hypothesis.
+
+### Moving an existing stack from named volumes to `./data`
+
+Stacks started before 2026-10-04 kept their data in Docker named volumes
+called `<project>_pgdata`, `<project>_blobs` and so on (`docker volume ls`).
+Copy them across once, **before** starting the new compose file. Otherwise
+the stack starts with an empty `./data` and an empty database:
+
+```bash
+docker compose down
+for v in pgdata redisdata blobs inbox processing archive failed; do
+  sudo mkdir -p data/$v
+  docker run --rm -v advisory-hub_$v:/from:ro -v "$PWD/data/$v":/to \
+    postgres:16-alpine sh -c 'cp -a /from/. /to/'
+done
+# now switch to the new compose file, then:
+docker compose up -d
+```
+
+Check the data is there (sign in, count advisories), then remove the old
+volumes with `docker volume rm advisory-hub_pgdata …` whenever you're
+ready. Nothing deletes them automatically.
 
 ## 5. Runbooks
 

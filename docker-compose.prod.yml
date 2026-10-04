@@ -20,6 +20,8 @@
 #     trusting every peer would let anyone who can reach it spoof
 #     X-Forwarded-For/-Proto and poison the audit log. See D-040.
 #   - Migrations run once, as their own container, before app/worker start.
+#   - All data in host folders under ./data/<volume> (made and owned by the
+#     one-shot init-data container) — backup is a copy of one directory.
 #   - Every required secret must be set; nothing falls back to a dev value.
 #   - app/worker: read-only root filesystem, all capabilities dropped,
 #     no-new-privileges, memory/CPU limits, bounded log files.
@@ -61,12 +63,15 @@ x-app: &app
     PROCESSING_PATH: /data/processing
     ARCHIVE_PATH: /data/archive
     FAILED_PATH: /data/failed
+  # Persistent data is in host folders under ./data/<volume>, not Docker
+  # named volumes, so backup/restore is a file copy of one directory
+  # (docs/operations.md §4). INBOX_HOST_PATH can point the inbox elsewhere.
   volumes:
-    - blobs:/data/blobs
-    - ${INBOX_HOST_PATH:-inbox}:/data/inbox
-    - processing:/data/processing
-    - archive:/data/archive
-    - failed:/data/failed
+    - ./data/blobs:/data/blobs
+    - ${INBOX_HOST_PATH:-./data/inbox}:/data/inbox
+    - ./data/processing:/data/processing
+    - ./data/archive:/data/archive
+    - ./data/failed:/data/failed
   read_only: true
   tmpfs:
     # PDF extraction and reparse use a temp dir; PDFs are capped at 50 MB.
@@ -76,6 +81,31 @@ x-app: &app
   restart: unless-stopped
 
 services:
+  # One-shot, first: creates ./data/<volume> and hands the app's folders to
+  # the image's non-root user (uid 10001) — Docker would otherwise create a
+  # missing bind-mount folder owned by root, and the app couldn't write to
+  # it. Also repairs ownership after a restore. Runs as root, but with only
+  # the file-ownership capabilities it needs and no network.
+  init-data:
+    image: ${IMAGE_NAMESPACE:?set IMAGE_NAMESPACE in .env}/advisory-hub:${IMAGE_TAG:?pin IMAGE_TAG in .env (e.g. 1.4.0 or sha-1a2b3c4)}
+    user: "0:0"
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        set -e;
+        for d in pgdata redisdata blobs inbox processing archive failed; do mkdir -p "/srv/data/$$d"; done;
+        for d in blobs inbox processing archive failed; do
+        find "/srv/data/$$d" ! -user 10001 -exec chown 10001:10001 {} +; done
+    volumes:
+      - ./data:/srv/data
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    network_mode: none
+    healthcheck: {disable: true}
+    <<: [*hardening, *logging]
+    restart: "no"
+
   app:
     <<: *app
     # --proxy-headers + FORWARDED_ALLOW_IPS: trust X-Forwarded-* only from
@@ -131,6 +161,7 @@ services:
     healthcheck: {disable: true}
     networks: [backend]
     depends_on:
+      init-data: {condition: service_completed_successfully}
       postgres: {condition: service_healthy}
     restart: "no"
 
@@ -141,7 +172,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: advisory_hub
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ./data/pgdata:/var/lib/postgresql/data
     shm_size: 256m
     networks: [backend]
     healthcheck:
@@ -160,7 +191,7 @@ services:
     # Job queue, not a cache: never evict, persist to disk.
     command: ["redis-server", "--save", "60", "1", "--appendonly", "yes", "--maxmemory-policy", "noeviction", "--loglevel", "warning"]
     volumes:
-      - redisdata:/data
+      - ./data/redisdata:/data
     networks: [backend]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -183,11 +214,3 @@ networks:
   # Worker's outbound access (NVD, VirusTotal, inventory APIs).
   egress:
 
-volumes:
-  pgdata:
-  redisdata:
-  blobs:
-  inbox:
-  processing:
-  archive:
-  failed:

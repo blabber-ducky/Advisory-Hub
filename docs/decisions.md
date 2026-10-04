@@ -1134,6 +1134,38 @@ every field and date. Through the actual web upload, 97 advisories updated
 via 135 legal status steps; re-importing changed nothing; re-issued
 DOH-2026591 updated on both records. 64 new tests.
 
+## D-043 — All persistent data in `./data/<volume>` host folders, made and owned by a one-shot `init-data` container
+
+**Date:** 2026-10-04 · **Status:** Accepted
+
+**Requested**: every deployment uses local directories for its volumes, at
+`./data/{volume_name}`, for easy backup and restore.
+
+**Decision**: every compose file bind-mounts `./data/pgdata`,
+`./data/redisdata`, `./data/blobs`, `./data/inbox`, `./data/processing`,
+`./data/archive` and `./data/failed`; there are no named volumes left.
+`INBOX_HOST_PATH` still overrides the inbox. Backup, restore and migration
+steps: operations.md §2 and §4.
+
+| Choice | Why |
+|---|---|
+| One-shot `init-data` service (app image, root, `CHOWN`/`DAC_OVERRIDE`/`FOWNER` only, no network, read-only) before `migrate`/`app`/`worker` | On Linux, Docker creates a missing bind-mount folder owned by root, and the app runs as uid 10001 — it couldn't write blobs or claim inbox files. Named volumes hid this because they copy the image's folder ownership. Doing it in a container means no manual `chown` step to forget, and it also repairs files a restore copied back as root. Tested on Docker's Linux kernel: root-owned files inside a `0700` folder are reassigned; without `CHOWN` it fails |
+| `init-data` leaves `pgdata`/`redisdata` ownership alone | Their images' entrypoints already fix their own folders; touching them would fight that |
+| `find … ! -user 10001 -exec chown` rather than `chown -R` | Only touches what's wrong, so a large blob store isn't rewalked-and-rewritten on every start |
+| New `.dockerignore` | A development checkout now keeps Postgres's files in `./data/`, which `docker build` would otherwise try to send as build context (and can't read on Linux). It also stops the restricted corpus and real inventory/tracker files being sent to the builder, which was already happening |
+| Fixed path `./data`, no `DATA_DIR` setting | As requested; one less thing to configure. The deployment folder's location *is* the data location |
+
+**Migration**: stacks started before this keep their data in named
+volumes, and the new files would start with an empty `./data`. The copy
+procedure is in operations.md §4. The development checkout's own volumes
+were copied this way (2,032 Postgres files: dev database incl. the 135
+advisories, plus the test database); the original volumes were kept.
+
+**Found while checking**: the Test-Deployments stack and the development
+checkout both use the project name `advisory-hub`, so `up` in either
+replaces the other's containers. Documented (`COMPOSE_PROJECT_NAME`,
+operations.md §1); not changed in that deployment's own files.
+
 ---
 
 ## Open decisions

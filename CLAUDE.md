@@ -120,6 +120,7 @@ docker/            # Dockerfile (app + worker + migrate image)
 docker-compose.yml           # base stack (pulls images)
 docker-compose.override.yml  # dev: builds locally, reload — auto-applied
 docker-compose.prod.yml      # production, self-contained, behind your WAF — see docs/deployment.md
+data/                        # all persistent data, ./data/<volume> (git- and docker-ignored)
 .env.example / .env.production.example
 ```
 
@@ -128,6 +129,35 @@ docker-compose.prod.yml      # production, self-contained, behind your WAF — s
 ## 4. Progress log
 
 Newest first. Update this when work lands.
+
+### 2026-10-04 — All data in `./data/<volume>` host folders
+- **On request** ("force all deployments to create local directories for
+  volume mapping … at ./data/{volume_name}"). Both compose files
+  (`docker-compose.yml`, `docker-compose.prod.yml`) now bind-mount
+  `./data/{pgdata,redisdata,blobs,inbox,processing,archive,failed}`; no
+  named volumes remain. D-043.
+- New one-shot **`init-data`** service: creates the folders and gives the
+  app's ones to uid 10001. Without it, Linux Docker creates them as root and
+  the app can't write. In production it runs with only `CHOWN`,
+  `DAC_OVERRIDE` and `FOWNER`, no network, read-only. New `.dockerignore`
+  (keeps `./data`, the corpus and real inventory/tracker files out of build
+  context).
+- Docs: operations.md §2 (data folders), §4 rewritten (cold/hot backup,
+  restore, migrating from named volumes), project-name collision note;
+  deployment.md (host layout, day-to-day, troubleshooting); both `.env`
+  examples. Fixed a containers table I'd broken earlier (a paragraph had
+  split off the postgres/redis rows).
+- **Dev data migrated**: the development checkout's named volumes were
+  copied (not moved) into its `./data/` — 2,032 Postgres files, all 135
+  advisories present afterwards. Old volumes kept.
+- **Verified**: dev stack (separate project name, so the running
+  Test-Deployments stack was untouched) and production file from an empty
+  `./data` both reach healthy; app folders owned by 10001; a real email
+  dropped into `./data/inbox` on the host was claimed and archived to
+  `./data/archive`; production migrations ran into `./data/pgdata`.
+  `init-data`'s exact privilege set tested on Docker's Linux kernel
+  against root-owned restored files (works; fails without `CHOWN`). Not
+  verifiable on macOS: Linux host-side ownership.
 
 ### 2026-10-04 — Import the manual spreadsheet tracker
 - **On request** ("convert [the tracker] into a single csv, put all info

@@ -40,7 +40,44 @@ x-app-image: &app-image
     - path: .env
       required: false
 
+# All persistent data lives in host folders under ./data/<volume> — not in
+# Docker named volumes — so backup and restore are plain file operations on
+# one directory (docs/operations.md §4):
+#
+#   ./data/pgdata      PostgreSQL           ./data/archive     ingested originals
+#   ./data/redisdata   Redis (job queue)    ./data/failed      failed ingests
+#   ./data/blobs       content store        ./data/inbox       watched inbox
+#   ./data/processing  claim area           (unless INBOX_HOST_PATH is set)
+x-app-volumes: &app-volumes
+  - ./data/blobs:/data/blobs
+  - ${INBOX_HOST_PATH:-./data/inbox}:/data/inbox
+  - ./data/processing:/data/processing
+  - ./data/archive:/data/archive
+  - ./data/failed:/data/failed
+
 services:
+  # One-shot, before app/worker: creates the ./data folders and hands the
+  # app's ones to the image's non-root user (uid 10001). Without it, Docker
+  # on Linux creates a missing bind-mount folder owned by root and the app
+  # can't write its blobs or claim inbox files. Also repairs ownership after
+  # a restore copied files back as root. Postgres and Redis fix their own
+  # folders in their entrypoints, so they're only created here.
+  init-data:
+    <<: *app-image
+    user: "0:0"
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        set -e;
+        for d in pgdata redisdata blobs inbox processing archive failed; do mkdir -p "/srv/data/$$d"; done;
+        for d in blobs inbox processing archive failed; do
+        find "/srv/data/$$d" ! -user 10001 -exec chown 10001:10001 {} +; done
+    volumes:
+      - ./data:/srv/data
+    healthcheck: {disable: true}
+    network_mode: none
+    restart: "no"
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -48,7 +85,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-advisory_hub_dev}
       POSTGRES_DB: advisory_hub
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ./data/pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U advisory_hub -d advisory_hub"]
       interval: 5s
@@ -60,7 +97,7 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
     volumes:
-      - redisdata:/data
+      - ./data/redisdata:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -73,18 +110,14 @@ services:
     environment: *app-env
     ports:
       - "${APP_PORT:-8080}:8000"
-    # INBOX_HOST_PATH lets the watched inbox be a real host folder (where
-    # Power Automate / a mail rule drops emails) instead of the internal
-    # named volume — set it to an absolute host path in .env, e.g.
-    # INBOX_HOST_PATH=/srv/advisory-hub/inbox. Unset falls back to the
-    # named `inbox` volume below, unchanged from before.
-    volumes:
-      - blobs:/data/blobs
-      - ${INBOX_HOST_PATH:-inbox}:/data/inbox
-      - processing:/data/processing
-      - archive:/data/archive
-      - failed:/data/failed
+    # INBOX_HOST_PATH points the watched inbox at another host folder (e.g.
+    # where Power Automate / a mail rule drops emails) instead of
+    # ./data/inbox — an absolute path in .env, e.g.
+    # INBOX_HOST_PATH=/srv/advisory-hub/inbox. uid 10001 must be able to
+    # write it; init-data only manages ./data.
+    volumes: *app-volumes
     depends_on:
+      init-data: {condition: service_completed_successfully}
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
     restart: unless-stopped
@@ -101,22 +134,10 @@ services:
       timeout: 20s
       start_period: 30s
       retries: 3
-    volumes:
-      - blobs:/data/blobs
-      - ${INBOX_HOST_PATH:-inbox}:/data/inbox
-      - processing:/data/processing
-      - archive:/data/archive
-      - failed:/data/failed
+    volumes: *app-volumes
     depends_on:
+      init-data: {condition: service_completed_successfully}
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
     restart: unless-stopped
 
-volumes:
-  pgdata:
-  redisdata:
-  blobs:
-  inbox:
-  processing:
-  archive:
-  failed:

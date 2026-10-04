@@ -74,6 +74,9 @@ docker compose exec app python -m advisory_hub.cli create-admin
 open http://localhost:8080
 ```
 
+All data — database, blobs, inbox, archive — lives in `./data/` beside the
+compose file (git-ignored), in every setup, dev and production.
+
 `docker-compose.override.yml` is applied automatically and adds development
 conveniences (builds from the working tree, published database port, live
 reload, console logs).
