@@ -19,3 +19,6 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 Test_Files/
+
+# macOS Finder metadata
+.DS_Store
