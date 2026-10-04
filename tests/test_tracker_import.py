@@ -744,3 +744,31 @@ class TestWeb:
         )
         assert r.status_code == 200
         assert "missing column" in r.text
+
+
+# ─── Regressions found while building the status export ──────────────────────
+
+
+@pytest.mark.integration
+@pytest.mark.usefixtures("_blob_root")
+class TestImportRegressions:
+    def test_acknowledged_without_a_channel_is_a_row_problem_not_a_crash(
+        self, db, source, actor
+    ) -> None:
+        a = _advisory(db, source, "DOH-1")
+        data = _csv(("DOH-1", "ACKNOWLEDGED", "acked by phone"))
+        preview = svc.preview_import(db, file_bytes=data, filename="t.csv")
+        assert any("ack_channel" in p.message for p in preview.plan.problems)
+        svc.apply_import(db, blob_id=preview.blob_id, actor=actor)  # must not raise
+        db.refresh(a)
+        assert a.status is S.NEW
+
+    def test_two_rows_for_one_advisory_apply_in_sequence(self, db, source, actor) -> None:
+        a = _advisory(db, source, "DOH-1")
+        data = _csv(("DOH-1", "TRIAGED", "first"), ("DOH-1", "REMEDIATED", "second"))
+        preview = svc.preview_import(db, file_bytes=data, filename="t.csv")
+        second = preview.plan.changes[1]
+        assert second.current is S.TRIAGED  # planned from where row 1 leaves it
+        svc.apply_import(db, blob_id=preview.blob_id, actor=actor)  # must not raise
+        db.refresh(a)
+        assert a.status is S.REMEDIATED

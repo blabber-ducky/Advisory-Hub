@@ -5,6 +5,13 @@
 # happen on an on-prem deployment. Delete this file (or use
 # `docker compose -f docker-compose.yml ...`) for a production-shaped run.
 
+# Its own project name, so a development stack never shares container
+# names with a deployment on the same machine. Both files otherwise say
+# "advisory-hub", and `docker compose up` (or `make up`) here would replace
+# that deployment's containers. Data is unaffected either way — it's in
+# ./data next to each compose file.
+name: advisory-hub-dev
+
 # Built from the working tree, never pulled — see x-local-build below.
 x-local-build: &local-build
   build:

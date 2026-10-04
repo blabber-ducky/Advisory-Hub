@@ -206,7 +206,9 @@ the old version serving untouched: read the output, fix or roll back
 | CLI | `docker compose exec app python -m advisory_hub.cli <command>` (operations.md, CLI table) |
 | Restart one service | `docker compose restart worker` |
 | Stop everything | `docker compose down` — data in `./data/` is untouched |
-| Back up | Stop, archive `./data/`, start — or a no-downtime `pg_dump` + file sync (operations.md §4) |
+| Back up | Stop, archive `./data/`, start — or a no-downtime `pg_dump` + file sync (operations.md §4). Also copy the latest `./data/exports/status-export-*.csv` off the host |
+| Status export on demand | Tracker page → **Export statuses (CSV)**, or `docker compose exec app python -m advisory_hub.cli status-export` |
+| Restore statuses into a rebuilt deployment | Re-ingest the emails, then upload the latest status export on **Import manual tracker** (operations.md §4) |
 | Restore | operations.md §4 — same `.env` as the backup |
 
 Certificates, renewals and TLS settings are managed on the WAF, not here.

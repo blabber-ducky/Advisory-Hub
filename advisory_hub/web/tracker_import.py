@@ -18,8 +18,11 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session as DbSession
 
 from ..api.deps import db_session
+from ..core.models.base import utcnow
 from ..core.models.enums import Role
+from ..core.services import status_export
 from ..core.services import tracker_import as svc
+from ..core.services.audit import record
 from ..core.services.auth import PermissionDeniedError, Principal
 from .tracker import _require_web_principal
 
@@ -134,6 +137,36 @@ def tracker_import_apply(
     }
     return RedirectResponse(
         f"/tracker-import?{urlencode(counts)}", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.get("/status-export.csv")
+def status_export_csv(
+    request: Request,
+    principal: Principal = Depends(_require_web_principal),
+    db: DbSession = Depends(db_session),
+) -> Response:
+    """Every advisory's status, acknowledgement and comment history as a CSV
+    the import page can restore from. Any signed-in user — it's what they
+    can already read in the tracker — but audit-logged as a bulk export."""
+    today = utcnow().date()
+    entries = status_export.export_entries(db, today=today)
+    text = svc.entries_to_csv(entries)
+    record(
+        db,
+        actor=principal.to_actor(request.client.host if request.client else None),
+        action="advisories.status_exported",
+        detail={"rows": len(entries)},
+    )
+    db.commit()
+    return Response(
+        content=text.encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{status_export.export_filename(today)}"'
+            )
+        },
     )
 
 

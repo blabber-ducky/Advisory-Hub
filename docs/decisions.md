@@ -1164,7 +1164,60 @@ advisories, plus the test database); the original volumes were kept.
 **Found while checking**: the Test-Deployments stack and the development
 checkout both use the project name `advisory-hub`, so `up` in either
 replaces the other's containers. Documented (`COMPOSE_PROJECT_NAME`,
-operations.md §1); not changed in that deployment's own files.
+operations.md §1). It then happened for real (see D-044), so the dev
+override now sets `name: advisory-hub-dev`.
+
+## D-044 — Status export in the import format, written daily by the worker, as a restore path
+
+**Date:** 2026-10-04 · **Status:** Accepted
+
+**Requested**: export every advisory's status as CSV; the CSV must be
+importable to restore a deployment that has crashed beyond recovery; and a
+scheduled job in one of the containers writing such an export daily into a
+data folder.
+
+**Decision**: one export (`core.services.status_export`), three triggers:
+the tracker page, CLI `status-export`, and a worker thread writing
+`./data/exports/status-export-<date>.csv` on `STATUS_EXPORT_CRON` (UTC),
+keeping `STATUS_EXPORT_KEEP_DAYS`. It's the tracker-import CSV format, so
+`/tracker-import` is the restore tool. Details: architecture.md §3.3.4;
+runbooks: operations.md §4.
+
+| Choice | Rejected alternative, and why |
+|---|---|
+| Same CSV format as the tracker import | A separate format and restore endpoint — two parsers and two rule sets to keep consistent, for one job the import already does safely (preview, forward-only, idempotent, all-or-nothing) |
+| Scheduled in the worker's existing poller pattern, on a cron expression | A `cron` daemon in a container — the image has none and runs as non-root. A second "scheduler" container adds a moving part for one job. The worker already runs the inbox/NVD/inventory pollers this way. `croniter` (already a dependency) gives real cron syntax |
+| Run when *the file for the latest scheduled time is missing* | Fire at the clock time — a worker down at 02:00 would silently skip the day, and a restart near 02:00 could write twice. Keyed on the file, it catches up on start and writes exactly once; two workers converge on the same file via atomic rename |
+| Comment history as one block per advisory, added only where an advisory has no comments | Re-creating each comment as its own row — the importer would author them all anyway, losing the original authors. And always adding the block would append it to every advisory when an export is imported into a healthy deployment |
+| Export open to any signed-in user, audit-logged | Admin-only — it's exactly what a viewer can already read in the tracker; logging the bulk export is the meaningful control |
+
+**Bugs in the tracker import found and fixed first** (failing tests
+written before the fix):
+
+1. A row with status ACKNOWLEDGED crashed Apply (`change_status()` needs an
+   `ack_channel` the CSV couldn't carry), rolling back the whole import.
+   Now: optional `ack_channel` column; without it the row is skipped with
+   a message.
+2. Two rows for one advisory (same number, e.g. re-issues) were both
+   planned from the advisory's *original* status, so the second's first
+   step was illegal once the first had applied, and Apply crashed. Now
+   planned in sequence. The row's `received_date` also picks the right
+   record among re-issues.
+
+**Verified on real data**: the real corpus with real statuses (via the
+tracker import, plus 3 acknowledgements) was exported. A **brand-new
+database** was built and all 135 emails re-ingested. Importing the export
+reproduced status, acknowledgement channel and acknowledged flag for all
+135 advisories identically (100 updated through 136 legal steps).
+Re-importing changed nothing. The worker container wrote the day's file
+on start (catch-up), owned by uid 10001, 135 rows.
+
+**Incident while building this**: running `make up` in the development
+checkout recreated the Test-Deployments stack's Postgres and Redis
+containers (shared project name `advisory-hub`). No data was affected (each
+stack's data is in its own `./data`); the deployment's containers were
+recreated from its own folder within minutes and verified. Prevented from
+now on by `name: advisory-hub-dev` in `docker-compose.override.yml`.
 
 ---
 

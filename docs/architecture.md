@@ -266,22 +266,67 @@ every proposed status in the preview — it's an inference, not a fact
 | Rule | Why |
 |---|---|
 | Every change goes through `change_status()`, one legal transition at a time, each with a comment | The single chokepoint (§4.2). NEW → Remediated is recorded as NEW → Triaged → In progress → Remediated |
-| Intermediate steps only ever pass through Triaged / In progress / Remediated | Passing through Awaiting vendor, Risk accepted or Not applicable would record history that never happened. Acknowledged is never used — it needs an acknowledgement channel the tracker doesn't record |
+| Intermediate steps only ever pass through Triaged / In progress / Remediated | Passing through Awaiting vendor, Risk accepted or Not applicable would record history that never happened |
+| Acknowledged only with an `ack_channel` | `change_status()` requires the channel. A row with an `ack_channel` is acknowledged first (NEW → Acknowledged → …); a row asking for ACKNOWLEDGED without one is skipped with a message |
 | Only forward. If the tool already has a status as far along (or further), the tool wins — "Kept" in the preview | Once someone works an advisory in the tool, an old spreadsheet mustn't undo it |
-| Matched on advisory number; every record with that number is updated | The regulator re-issues advisories under the same number |
+| Matched on advisory number; every record with that number is updated — unless the row's `received_date` picks out one of them | The regulator re-issues advisories under the same number |
+| Several rows for one advisory apply in order, each from where the previous left it | Otherwise the second row's first step is illegal and the whole import fails |
 | Rows with no matching advisory are reported, not created | Advisories come from email only. Re-import after they're ingested |
 | Re-importing the same file changes nothing and posts no duplicate comments | Safe to run again, e.g. monthly while both are in use |
 | Preview writes nothing; Apply is one transaction | All or nothing |
 
 **Editing before importing.** "Download as CSV" on the preview, or
 `advisory-hub tracker-to-csv` (operations.md, CLI), gives one flat CSV —
-`advisory_ref, received_date, subject, status, comment, source` — with the
+`advisory_ref, received_date, subject, status, comment, source, ack_channel` — with the
 proposed status and comment filled in. Correct the `status` column (any tool
 status, or blank for no change) or the comment, and upload the CSV instead
 of the workbook. Statuses in the CSV are taken as written; an unknown value
 skips that row with a message rather than being guessed.
 
 Web-only for now: there's no REST endpoint for the import.
+
+#### 3.3.4 Status export — an importable backup
+
+**Export statuses (CSV)** on the tracker page (any signed-in user;
+audit-logged as `advisories.status_exported`), the CLI `status-export`, and
+a daily job in the worker all produce the same file: **one row per advisory,
+in the import CSV format above**. So the import page is also the restore
+tool.
+
+| Column | Holds |
+|---|---|
+| `status` | The advisory's current status |
+| `ack_channel` | How it was acknowledged, if it was |
+| `comment` | Its whole history as one block: when, who and how it was acknowledged, then every comment with its date, author and status change |
+| `received_date` | Tells re-issues sharing a number apart |
+| `source` | `Status export <date>` — marks the row as a restore row |
+
+**Restoring a lost deployment** (runbook: operations.md §4): stand up a
+fresh deployment, re-ingest the original emails (from the archive or by
+re-dropping them), then upload the latest export on `/tracker-import`.
+
+| What comes back | How |
+|---|---|
+| Status | Through legal transitions via `change_status()`, each recorded |
+| Acknowledgement | Re-recorded with its channel. The *time* becomes the import time; the original time and person are in the history comment |
+| Comments | As one history comment per advisory, authored by whoever runs the import, preserving each original's date and author in the text |
+| Assignee, priority overrides, VirusTotal results, IOC remediation statuses, inventory scans | **Not in the export** — re-derive or redo |
+
+**Safe against a healthy deployment.** Statuses already in place are left
+alone, and the history comment is only added to an advisory that has *no*
+comments yet. Importing an export into a working deployment changes
+nothing, so a mistaken upload doesn't append a history block to every
+advisory.
+
+**Known limit.** Two re-issues sharing a number *and* a received day can't
+be told apart. If they ended in different statuses, both restore to the
+further-along one.
+
+**Verified on real data**: the 135-advisory corpus with real statuses
+(including acknowledgements) was exported, and a brand-new database was
+built by re-ingesting all 135 emails. Importing the export reproduced
+status, acknowledgement channel and acknowledged flag identically for every
+advisory. Importing it again changed nothing.
 
 ### 3.4 `api/` — REST
 

@@ -295,6 +295,25 @@ def cmd_tracker_to_csv(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_status_export(args: argparse.Namespace) -> int:
+    """Write every advisory's status as an importable CSV — the same file the
+    worker writes daily and the tracker page's "Export statuses" downloads."""
+    from pathlib import Path
+
+    from .core.models.base import utcnow
+    from .core.services import status_export
+
+    today = utcnow().date()
+    with session_scope() as db:
+        if args.output:
+            target = Path(args.output)
+            target.write_text(status_export.export_csv(db, today=today), encoding="utf-8-sig")
+        else:
+            target = status_export.write_export_file(db, settings.status_export_dir, day=today)
+    print(f"Wrote {target}")
+    return 0
+
+
 def cmd_check(_args: argparse.Namespace) -> int:
     from .core.storage.blobs import FilesystemBlobStore
 
@@ -367,6 +386,10 @@ def main() -> int:
     p.add_argument("path", help="Tracker .xlsx (or an existing import CSV, to re-check it)")
     p.add_argument("-o", "--output", help="Output CSV (default: next to the input)")
     p.set_defaults(func=cmd_tracker_to_csv)
+
+    p = sub.add_parser("status-export", help="Export every advisory's status as an importable CSV")
+    p.add_argument("-o", "--output", help="File to write (default: STATUS_EXPORT_DIR)")
+    p.set_defaults(func=cmd_status_export)
 
     p = sub.add_parser("check", help="Verify database, storage, and configuration")
     p.set_defaults(func=cmd_check)

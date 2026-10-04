@@ -35,6 +35,7 @@ and the progress log in [CLAUDE.md](CLAUDE.md) §4.
 | MCP server for external dashboards and agent integrations | 3 |
 | Stats/reporting endpoints, SLA tracking, exports | 3 |
 | Import the manual spreadsheet tracker (statuses + comments), with preview | Added |
+| Status export (CSV, on demand + daily backup) that re-imports to restore a lost deployment | Added |
 
 ## Documentation
 

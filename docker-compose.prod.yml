@@ -72,6 +72,7 @@ x-app: &app
     - ./data/processing:/data/processing
     - ./data/archive:/data/archive
     - ./data/failed:/data/failed
+    - ./data/exports:/data/exports  # daily status-export CSVs
   read_only: true
   tmpfs:
     # PDF extraction and reparse use a temp dir; PDFs are capped at 50 MB.
@@ -93,8 +94,8 @@ services:
     command:
       - >-
         set -e;
-        for d in pgdata redisdata blobs inbox processing archive failed; do mkdir -p "/srv/data/$$d"; done;
-        for d in blobs inbox processing archive failed; do
+        for d in pgdata redisdata blobs inbox processing archive failed exports; do mkdir -p "/srv/data/$$d"; done;
+        for d in blobs inbox processing archive failed exports; do
         find "/srv/data/$$d" ! -user 10001 -exec chown 10001:10001 {} +; done
     volumes:
       - ./data:/srv/data

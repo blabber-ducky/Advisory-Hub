@@ -36,10 +36,20 @@ HEADER_ALIASES: dict[str, str] = {
     "notes": "notes",
 }
 
-#: Converted-CSV columns, in order. ``status`` and ``comment`` are what the
-#: import acts on; the rest are there so a person editing the file can tell
-#: rows apart.
-CSV_COLUMNS = ("advisory_ref", "received_date", "subject", "status", "comment", "source")
+#: Import-CSV columns, in order. ``status`` and ``comment`` are what the
+#: import acts on; ``ack_channel`` (optional) is needed to restore an
+#: acknowledgement; ``received_date`` picks the right record when a
+#: re-issued advisory shares its number; the rest help a person editing the
+#: file tell rows apart. The status export writes the same format.
+CSV_COLUMNS = (
+    "advisory_ref",
+    "received_date",
+    "subject",
+    "status",
+    "comment",
+    "source",
+    "ack_channel",
+)
 
 _HEADER_SCAN_ROWS = 5
 
@@ -69,6 +79,7 @@ class CsvRow:
     status: str
     comment: str
     source: str
+    ack_channel: str = ""
 
 
 class TrackerFormatError(Exception):
@@ -176,6 +187,7 @@ def rows_from_csv(text: str) -> list[CsvRow]:
                 status=row.get("status", ""),
                 comment=row.get("comment", ""),
                 source=row.get("source", "") or f"CSV line {line}",
+                ack_channel=row.get("ack_channel", ""),
             )
         )
     return out

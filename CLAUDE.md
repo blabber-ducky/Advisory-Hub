@@ -130,6 +130,39 @@ data/                        # all persistent data, ./data/<volume> (git- and do
 
 Newest first. Update this when work lands.
 
+### 2026-10-04 — Status export: on demand, daily, and re-importable to restore
+- **On request** ("export the status of all advisories … must be
+  importable in case my deployment crashes … a cronjob in one of the
+  containers to create a CSV export everyday in one of the volumes").
+  D-044; architecture.md §3.3.4; runbooks in operations.md §4.
+- New `core/services/status_export.py`, tracker-page link **Export
+  statuses (CSV)** (`/status-export.csv`, any signed-in user,
+  audit-logged), CLI `status-export`, worker poller writing
+  `./data/exports/status-export-<date>.csv` on `STATUS_EXPORT_CRON` (UTC,
+  default 02:00), keeping 30 days; catches up if the worker was down. New
+  `./data/exports` folder (both compose files, `init-data`); 4 new
+  `STATUS_EXPORT_*` settings.
+- Same format as the tracker import, so `/tracker-import` restores it.
+  The import gained an optional `ack_channel` column (acknowledges first,
+  NEW → ACKNOWLEDGED → …), sequential planning of repeated rows,
+  received-date matching for re-issues, and restore-history comments only
+  on advisories with no comments.
+- **Two tracker-import bugs fixed** (failing tests first): ACKNOWLEDGED
+  rows crashed Apply (no channel); two rows for one advisory crashed Apply
+  (second planned from the stale status).
+- **Incident (mine)**: `make up` in the dev checkout replaced the running
+  Test-Deployments stack's Postgres/Redis containers (both named
+  `advisory-hub`). No data affected; restored from that stack's own folder
+  and verified (`cli check` all ok, 29 tables, its admin present). Fixed at
+  the source: `docker-compose.override.yml` now sets `name:
+  advisory-hub-dev`.
+- **Verified**: 672 tests passing (14 new); `ruff`/`mypy --strict` clean.
+  Real disaster drill: export from a clone with real statuses, brand-new
+  database re-ingesting all 135 emails, import → status + acknowledgement
+  identical for all 135, re-import a no-op. Worker container wrote the
+  day's file on start (uid 10001, 135 rows). Known limit: same-number
+  re-issues received on the same day can't be told apart.
+
 ### 2026-10-04 — All data in `./data/<volume>` host folders
 - **On request** ("force all deployments to create local directories for
   volume mapping … at ./data/{volume_name}"). Both compose files

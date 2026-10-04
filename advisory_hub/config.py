@@ -63,6 +63,15 @@ class Settings(BaseSettings):
     # ─── Inventory API sync (Phase 2c) ───────────────────────────────────────
     inventory_sync_poll_seconds: int = 300
 
+    # ─── Daily status export (backup) ────────────────────────────────────────
+    #: The worker writes every advisory's status as an importable CSV here on
+    #: this cron schedule (UTC), keeping the last ``status_export_keep_days``
+    #: files. See core.services.status_export and docs/operations.md §4.
+    status_export_enabled: bool = True
+    status_export_cron: str = "0 2 * * *"
+    status_export_dir: Path = Path("/data/exports")
+    status_export_keep_days: int = 30
+
     # ─── Web ─────────────────────────────────────────────────────────────────
     session_cookie_secure: bool = True
     session_max_age_seconds: int = 43_200

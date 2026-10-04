@@ -56,6 +56,7 @@ stack itself only speaks HTTP; see §7.
 | `create-token` | Mint a scoped API token — **shown once** |
 | `list-users` | List accounts and roles |
 | `check` | Verify database, blob volume, inbox, and schema |
+| `status-export [-o file.csv]` | Write every advisory's status + history as an importable CSV — the same file the daily job writes. Default: into `STATUS_EXPORT_DIR` as `status-export-<date>.csv` |
 | `tracker-to-csv <file.xlsx> [-o out.csv]` | Convert the manual tracker workbook into the editable import CSV (status + comment per advisory). No database needed. See architecture.md §3.3.3 |
 
 ## 1. Containers
@@ -76,7 +77,9 @@ no separate scheduler container.
 Compose project (`name: advisory-hub` in the compose files). Two stacks on
 one machine with the same project name share container names, so `up` in one
 replaces the other's containers. Give each extra stack its own
-`COMPOSE_PROJECT_NAME` in its `.env` (e.g. `advisory-hub-test`).
+`COMPOSE_PROJECT_NAME` in its `.env` (e.g. `advisory-hub-test`). A
+development checkout is already separate: `docker-compose.override.yml`
+names it `advisory-hub-dev`.
 
 ## 2. Data folders
 
@@ -93,12 +96,13 @@ so backing up and restoring is a file operation on one directory (§4).
 | `./data/redisdata` | `redis:/data` | Job queue (AOF/RDB) | Optional — queued jobs only |
 | `./data/inbox` | `/data/inbox` | Watched inbox (unless `INBOX_HOST_PATH` is set) | No — transient |
 | `./data/processing` | `/data/processing` | Worker claim area | No — transient |
+| `./data/exports` | `/data/exports` | Daily status-export CSVs, kept 30 days (§4) | **Yes** — and copy the latest off the host too |
 
 **Ownership is handled for you.** The app runs as uid 10001. On Linux,
 Docker creates a missing bind-mount folder owned by root, which the app
 can't write to. The one-shot `init-data` container runs before
 `app`/`worker`, creates every folder, and gives `blobs`, `inbox`,
-`processing`, `archive` and `failed` to uid 10001. It also fixes anything
+`processing`, `archive`, `failed` and `exports` to uid 10001. It also fixes anything
 not owned by uid 10001, such as files a restore copied back as root.
 Postgres and Redis fix their own folders at startup. On the host you'll
 see uid 10001 (or a raw number) as the owner of those folders on Linux;
@@ -156,6 +160,10 @@ Every variable belongs in `.env.example` with a dummy value and a comment.
 | `APP_PORT` | no | **Compose-level.** Host port `app` listens on. Default `8080` in the base/dev file; default `8000` in `docker-compose.prod.yml`, where it's the only published port |
 | `TRUSTED_PROXY_IPS` | yes (production) | **Compose-level**, maps to `FORWARDED_ALLOW_IPS` for uvicorn. Comma-separated literal IP address(es) of your WAF/reverse proxy — **not** `*` and **not** a CIDR. `app`'s port is reachable by whatever the firewall allows, so trusting every peer would let anyone who can reach it spoof `X-Forwarded-For`/`-Proto`; this must name every address the WAF itself connects from. See D-040, deployment.md. |
 | `POSTGRES_PASSWORD` | yes (production) | **Compose-level.** Database password, embedded in `DATABASE_URL` by compose — use hex (`openssl rand -hex 32`) so it's URL-safe. Only read when the database volume is first created |
+| `STATUS_EXPORT_ENABLED` | no | Default `true`. The worker's daily status export (§4) |
+| `STATUS_EXPORT_CRON` | no | Default `0 2 * * *` — 02:00 **UTC** (06:00 UAE). Standard 5-field cron. A worker that was down at the time catches up when it starts |
+| `STATUS_EXPORT_DIR` | no | Default `/data/exports` (`./data/exports` on the host) |
+| `STATUS_EXPORT_KEEP_DAYS` | no | Default `30`. Older `status-export-*.csv` files are deleted; nothing else in the folder is touched |
 | `SESSION_COOKIE_SECURE` | no | Default `true`; `false` only for local HTTP dev. The production file forces `true` — users must reach it over HTTPS (via the WAF) or sign-in won't stick. |
 | `COMPOSE_FILE` | production | **Compose-level.** Which compose file plain `docker compose …` uses: `docker-compose.prod.yml` in production (set by `.env.production.example`). Also stops `docker-compose.override.yml` being applied. |
 | `LOG_LEVEL` | no | Default `INFO` |
@@ -223,6 +231,45 @@ Use the **same `.env`** as the backup. `POSTGRES_PASSWORD` is stored inside
 **Restore is not backup.** Exercise a full restore into a scratch environment at
 least once per quarter and record the date. A restore that has never been tried
 is a hypothesis.
+
+### Daily status export — the last line of defence
+
+Every day (`STATUS_EXPORT_CRON`, 02:00 UTC by default) the worker writes
+`./data/exports/status-export-<date>.csv`: every advisory's status,
+acknowledgement and full comment history, in the format the import page
+reads. 30 days are kept. The file is only readable by its owner (uid 10001;
+use `sudo` on Linux). It's also on demand: **Export statuses (CSV)** on the
+tracker page, or `advisory-hub status-export`.
+
+It lives in `./data`, so a disaster that takes `./data` with it takes the
+exports too. **Copy the latest one somewhere else** as part of your backup,
+e.g. a nightly job:
+
+```bash
+sudo cp "$(ls -1 /opt/advisory-hub/data/exports/status-export-*.csv | tail -1)" /backup/elsewhere/
+```
+
+The worker logs `status_export.written` each day, and `status_export.failed`
+with the reason if it couldn't write.
+
+### Restoring from a status export (deployment lost, no usable backup)
+
+The export restores **statuses, acknowledgements and comments** — not the
+advisories themselves, which always come from the emails:
+
+1. Stand up a fresh deployment (deployment.md §3).
+2. Re-ingest the original emails: put the `.msg`/`.eml` files (e.g. from a
+   copy of `archive/`, or re-exported from the mailbox) into the inbox, or
+   `docker compose exec app python -m advisory_hub.cli ingest /path`.
+3. Sign in, open **Import manual tracker**, upload the latest
+   `status-export-<date>.csv`, check the preview ("Not in the tool yet"
+   should be 0 if every email was re-ingested), and **Apply**.
+
+What comes back, and what doesn't, is tabled in architecture.md §3.3.4.
+Statuses come back through the normal status-change process, with a comment
+at each step. Comments come back as one history block per advisory.
+Importing an export into a healthy deployment is harmless: it changes
+nothing.
 
 ### Moving an existing stack from named volumes to `./data`
 

@@ -39,7 +39,7 @@ from ...config import settings
 from ...manual_tracker import parse
 from ...manual_tracker.xlsx import XlsxError, read_workbook
 from ..models.advisory import Advisory, Blob, Comment
-from ..models.enums import ALLOWED_TRANSITIONS, AdvisoryStatus
+from ..models.enums import ALLOWED_TRANSITIONS, AckChannel, AdvisoryStatus
 from ..storage.blobs import FilesystemBlobStore
 from . import advisories as advisories_svc
 from .audit import Actor, record
@@ -47,6 +47,12 @@ from .audit import Actor, record
 XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 CSV_CONTENT_TYPE = "text/csv"
 _ALLOWED_CONTENT_TYPES = {XLSX_CONTENT_TYPE, CSV_CONTENT_TYPE}
+
+
+#: ``source`` value prefix the status export writes. Rows carrying it hold an
+#: advisory's whole comment history as one comment, meant for a deployment
+#: being rebuilt — so that comment is only added where an advisory has none.
+RESTORE_SOURCE_PREFIX = "Status export"
 
 
 class TrackerImportError(Exception):
@@ -152,6 +158,13 @@ class TrackerEntry:
     subject: str = ""
     #: Why this status — the matching rule's label, or "Set in CSV".
     reason: str | None = None
+    #: How the advisory was acknowledged, when restoring one that was.
+    ack_channel: AckChannel | None = None
+
+    @property
+    def is_restore(self) -> bool:
+        """Written by the status export (``core.services.status_export``)."""
+        return self.source.startswith(RESTORE_SOURCE_PREFIX)
 
 
 @dataclass(slots=True)
@@ -171,6 +184,18 @@ def _parse_status(value: str) -> AdvisoryStatus | None:
             f"Unknown status {value!r} — use one of "
             + ", ".join(s.value for s in AdvisoryStatus)
             + ", or leave it blank"
+        ) from None
+
+
+def _parse_ack_channel(value: str) -> AckChannel | None:
+    key = value.strip().upper()
+    if not key:
+        return None
+    try:
+        return AckChannel(key)
+    except ValueError:
+        raise ValueError(
+            f"Unknown ack_channel {value!r} — use EMAIL, PHONE or OTHER, or leave it blank"
         ) from None
 
 
@@ -210,8 +235,18 @@ def entries_from_upload(
         for csv_row in parse.rows_from_csv(text):
             try:
                 status = _parse_status(csv_row.status)
+                ack_channel = _parse_ack_channel(csv_row.ack_channel)
             except ValueError as exc:
                 problems.append(EntryProblem(csv_row.source, str(exc)))
+                continue
+            if status is AdvisoryStatus.ACKNOWLEDGED and ack_channel is None:
+                problems.append(
+                    EntryProblem(
+                        csv_row.source,
+                        "Status ACKNOWLEDGED needs an ack_channel (EMAIL, PHONE or OTHER) — "
+                        "the tool records how every acknowledgement was made",
+                    )
+                )
                 continue
             entries.append(
                 TrackerEntry(
@@ -222,6 +257,7 @@ def entries_from_upload(
                     received=csv_row.received,
                     subject=csv_row.subject,
                     reason="Set in CSV" if status else None,
+                    ack_channel=ack_channel,
                 )
             )
         return entries, problems
@@ -239,6 +275,7 @@ def entries_to_csv(entries: list[TrackerEntry]) -> str:
                 "status": e.status.value if e.status else "",
                 "comment": e.comment,
                 "source": e.source,
+                "ack_channel": e.ack_channel.value if e.ack_channel else "",
             }
             for e in entries
         ]
@@ -333,6 +370,21 @@ class ImportPlan:
         return sum(1 for c in self.changes if c.add_comment)
 
 
+def _plan_path(
+    current: AdvisoryStatus, target: AdvisoryStatus, ack_channel: AckChannel | None
+) -> list[AdvisoryStatus] | None:
+    """As ``transition_path``, but an advisory restored with a known
+    acknowledgement channel is acknowledged first (NEW → ACKNOWLEDGED → …),
+    so the restored record keeps the fact that it was acknowledged."""
+    if ack_channel is not None and current is AdvisoryStatus.NEW:
+        if target is AdvisoryStatus.ACKNOWLEDGED:
+            return [AdvisoryStatus.ACKNOWLEDGED]
+        rest = transition_path(AdvisoryStatus.ACKNOWLEDGED, target)
+        if rest is not None:
+            return [AdvisoryStatus.ACKNOWLEDGED, *rest]
+    return transition_path(current, target)
+
+
 def _plan(db: DbSession, entries: list[TrackerEntry], problems: list[EntryProblem]) -> ImportPlan:
     refs = {e.ref for e in entries}
     by_ref: dict[str, list[Advisory]] = {}
@@ -346,10 +398,20 @@ def _plan(db: DbSession, entries: list[TrackerEntry], problems: list[EntryProble
             select(Comment.advisory_id, Comment.body).where(Comment.advisory_id.in_(ids))
         ):
             existing.add((advisory_id, body.strip()))
+    has_comments = {advisory_id for advisory_id, _ in existing}
+
+    #: Status each advisory will have once the rows planned so far are
+    #: applied — so a second row for the same advisory is planned from where
+    #: the first leaves it, not from where it started.
+    planned: dict[uuid.UUID, AdvisoryStatus] = {}
 
     changes: list[PlannedChange] = []
     for entry in entries:
         matches = sorted(by_ref.get(entry.ref, []), key=lambda a: a.received_at)
+        if len(matches) > 1 and entry.received:
+            # A re-issue shares its number; the received date picks the record.
+            same_day = [a for a in matches if a.received_at.date().isoformat() == entry.received]
+            matches = same_day or matches
         if not matches:
             changes.append(
                 PlannedChange(entry, Outcome.NOT_FOUND, note="No advisory with this number")
@@ -357,36 +419,45 @@ def _plan(db: DbSession, entries: list[TrackerEntry], problems: list[EntryProble
             continue
         comment = entry.comment.strip()
         for advisory in matches:
+            current = planned.get(advisory.id, advisory.status)
             new_comment = bool(comment) and (advisory.id, comment) not in existing
+            restore_skipped = new_comment and entry.is_restore and advisory.id in has_comments
+            if restore_skipped:
+                new_comment = False
             change = PlannedChange(
                 entry,
                 Outcome.NOTHING,
                 advisory_id=advisory.id,
                 advisory_title=advisory.title,
-                current=advisory.status,
+                current=current,
                 add_comment=new_comment,
             )
             target = entry.status
-            if target is not None and STATUS_RANK[target] > STATUS_RANK[advisory.status]:
-                path = transition_path(advisory.status, target)
+            if target is not None and STATUS_RANK[target] > STATUS_RANK[current]:
+                path = _plan_path(current, target, entry.ack_channel)
                 if path:
                     change.outcome, change.path = Outcome.UPDATE, path
+                    planned[advisory.id] = target
                 else:  # pragma: no cover — every forward status is reachable today
                     change.outcome = Outcome.KEPT
-                    change.note = f"No legal route from {advisory.status.value} to {target.value}"
-            elif target is not None and target is not advisory.status:
+                    change.note = f"No legal route from {current.value} to {target.value}"
+            elif target is not None and target is not current:
                 change.outcome = Outcome.KEPT
-                change.note = (
-                    f"Tool already has {advisory.status.value}; tracker says {target.value}"
-                )
+                change.note = f"Tool already has {current.value}; file says {target.value}"
             elif new_comment:
                 change.outcome = Outcome.COMMENT_ONLY
             elif comment or target is not None:
                 change.outcome = Outcome.UNCHANGED
             if change.outcome is Outcome.KEPT and new_comment:
-                change.note += " — tracker comment will still be added"
+                change.note += " — comment will still be added"
+            if restore_skipped:
+                change.note = (change.note + " — " if change.note else "") + (
+                    "restored history not added: advisory already has comments"
+                )
             changes.append(change)
             existing.add((advisory.id, comment))  # duplicate rows in one file
+            if new_comment:
+                has_comments.add(advisory.id)
     return ImportPlan(changes=changes, problems=problems)
 
 
@@ -471,19 +542,22 @@ def apply_import(db: DbSession, *, blob_id: uuid.UUID, actor: Actor) -> ImportRe
                 if step is target and change.add_comment:
                     body = comment
                 elif step is target:
-                    # The tracker comment is already on the advisory (or
-                    # the row had none) — don't post it twice.
-                    body = (
-                        f"Status set to {target.value} from manual tracker import "
-                        f"({change.entry.source})."
-                    )
+                    # The comment is already on the advisory (or the row had
+                    # none) — don't post it twice.
+                    body = f"Status set to {target.value} by import ({change.entry.source})."
                 else:
                     body = (
-                        f"Manual tracker import ({change.entry.source}): intermediate step "
-                        f"towards {target.value}."
+                        f"Import ({change.entry.source}): intermediate step towards {target.value}."
                     )
                 advisories_svc.change_status(
-                    db, change.advisory_id, to_status=step, comment_body=body, actor=actor
+                    db,
+                    change.advisory_id,
+                    to_status=step,
+                    comment_body=body,
+                    actor=actor,
+                    ack_channel=(
+                        change.entry.ack_channel if step is AdvisoryStatus.ACKNOWLEDGED else None
+                    ),
                 )
                 result.status_changes += 1
             result.advisories_updated += 1

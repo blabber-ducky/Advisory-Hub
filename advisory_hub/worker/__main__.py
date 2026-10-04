@@ -56,6 +56,7 @@ def main() -> int:
     _start_inbox_poller()
     _start_enrichment_poller()
     _start_inventory_sync_poller()
+    _start_status_export_poller()
 
     worker = Worker(queues, connection=connection)
     worker.work(with_scheduler=True)
@@ -74,7 +75,7 @@ def _preload_poller_dependencies() -> None:
     import croniter  # noqa: F401
 
     from ..core.models import base, enums  # noqa: F401
-    from ..core.services import audit, enrichment, inventory  # noqa: F401
+    from ..core.services import audit, enrichment, inventory, status_export  # noqa: F401
     from ..db import session_scope  # noqa: F401
     from ..ingest import pipeline  # noqa: F401
     from ..inventory import api_client  # noqa: F401
@@ -209,6 +210,45 @@ def _start_inventory_sync_poller() -> None:
             time.sleep(settings.inventory_sync_poll_seconds)
 
     thread = threading.Thread(target=_loop, name="inventory-sync-poller", daemon=True)
+    thread.start()
+
+
+def _start_status_export_poller() -> None:
+    """Daily backup: every advisory's status as an importable CSV.
+
+    Checks once a minute whether the export for the most recent scheduled
+    time (``STATUS_EXPORT_CRON``, UTC) exists, and writes it if not. Keyed on
+    the file existing rather than on "did we just pass 02:00", so a worker
+    that was down at the scheduled time catches up when it starts, and a
+    restart never writes a second copy. Two workers racing write identical
+    content through an atomic rename, so the outcome is the same file.
+    """
+    import threading
+    import time
+
+    def _loop() -> None:
+        while True:
+            try:
+                from ..core.models.base import utcnow
+                from ..core.services import status_export
+                from ..db import session_scope
+
+                if settings.status_export_enabled:
+                    with session_scope() as db:
+                        path = status_export.run_due_export(
+                            db,
+                            now=utcnow(),
+                            cron=settings.status_export_cron,
+                            directory=settings.status_export_dir,
+                            keep_days=settings.status_export_keep_days,
+                        )
+                    if path is not None:
+                        log.info("status_export.written", path=str(path))
+            except Exception:
+                log.exception("status_export.failed")
+            time.sleep(60)
+
+    thread = threading.Thread(target=_loop, name="status-export-poller", daemon=True)
     thread.start()
 
 
