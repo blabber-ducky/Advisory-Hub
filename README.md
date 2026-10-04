@@ -36,6 +36,7 @@ and the progress log in [CLAUDE.md](CLAUDE.md) §4.
 | Stats/reporting endpoints, SLA tracking, exports | 3 |
 | Import the manual spreadsheet tracker (statuses + comments), with preview | Added |
 | Status export (CSV, on demand + daily backup) that re-imports to restore a lost deployment | Added |
+| HTTPS served by the app itself — your certificate, or a self-signed one generated on first start | Added |
 
 ## Documentation
 
@@ -59,8 +60,8 @@ Start here, in order:
 
 Python 3.13+ · FastAPI · PostgreSQL 16 · SQLAlchemy 2 + Alembic · Jinja2 + HTMX
 (hand-written CSS, no framework) · Redis + RQ for background work · Docker
-Compose. No Node toolchain required. TLS is terminated by your enterprise
-WAF / reverse proxy, not by the stack.
+Compose. No Node toolchain required. HTTPS is served by the app itself
+(own or generated self-signed certificate) or by your WAF / reverse proxy.
 
 ## Quick start (development)
 
@@ -86,8 +87,8 @@ reload, console logs).
 
 Use **`docker-compose.prod.yml`** and follow
 [docs/deployment.md](docs/deployment.md). It pulls the pinned image CI
-publishes to Docker Hub (`advisory-hub`), runs behind your enterprise WAF /
-reverse proxy (which terminates TLS), keeps the database and queue off the
+publishes to Docker Hub (`advisory-hub`), serves HTTPS itself or sits
+behind your WAF / reverse proxy, keeps the database and queue off the
 network, runs migrations automatically, and refuses to start with any
 required value unset.
 

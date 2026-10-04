@@ -6,19 +6,23 @@
 # .env sets COMPOSE_FILE=docker-compose.prod.yml, so plain `docker compose`
 # uses this file. Full walkthrough: docs/deployment.md.
 #
-# This stack speaks plain HTTP only. TLS, HSTS and the HTTP→HTTPS redirect
-# belong to the enterprise WAF / reverse proxy in front of it (F5, Citrix
-# ADC, Imperva, Azure Application Gateway, …), which is outside this stack.
+# HTTPS — one of:
+#   - The app serves it itself: HTTPS_ENABLED=true. Uses ./data/certs/
+#     server.crt + server.key if you provide them, or generates a
+#     self-signed certificate for TLS_HOSTNAMES (docs/operations.md §7).
+#   - An enterprise WAF / reverse proxy in front terminates it, and the app
+#     speaks HTTP to it (set TRUSTED_PROXY_IPS to the proxy's address).
+# Sign-in needs one of these: the session cookie is always Secure.
 #
 # What makes it production-shaped, compared with docker-compose.yml:
 #   - Pulls pinned, CI-published images; never builds. IMAGE_NAMESPACE and
 #     IMAGE_TAG are required — there is no "latest" default here.
 #   - Only `app` is published. Postgres and Redis sit on an internal
 #     network with no route out.
-#   - Forwarded headers are trusted ONLY from TRUSTED_PROXY_IPS — never "*".
-#     `app`'s port is reachable by whatever your firewall lets through, so
-#     trusting every peer would let anyone who can reach it spoof
-#     X-Forwarded-For/-Proto and poison the audit log. See D-040.
+#   - Forwarded headers are trusted only from TRUSTED_PROXY_IPS (default:
+#     no external peer) — never "*". `app`'s port is reachable by whatever
+#     your firewall lets through, so trusting every peer would let anyone
+#     who can reach it spoof X-Forwarded-For/-Proto. See D-040.
 #   - Migrations run once, as their own container, before app/worker start.
 #   - All data in host folders under ./data/<volume> (made and owned by the
 #     one-shot init-data container) — backup is a copy of one directory.
@@ -26,11 +30,9 @@
 #   - app/worker: read-only root filesystem, all capabilities dropped,
 #     no-new-privileges, memory/CPU limits, bounded log files.
 #
-# Operator responsibilities this file cannot enforce:
-#   - Firewall APP_PORT so only the WAF/reverse proxy can reach it — never
-#     expose it directly to the wider network or the internet.
-#   - The WAF/proxy must terminate TLS and forward Host, X-Forwarded-For and
-#     X-Forwarded-Proto unmodified.
+# Behind a WAF / reverse proxy, also:
+#   - Firewall APP_PORT so only the proxy can reach it.
+#   - Have it forward Host, X-Forwarded-For and X-Forwarded-Proto.
 
 name: advisory-hub
 
@@ -94,8 +96,8 @@ services:
     command:
       - >-
         set -e;
-        for d in pgdata redisdata blobs inbox processing archive failed exports; do mkdir -p "/srv/data/$$d"; done;
-        for d in blobs inbox processing archive failed exports; do
+        for d in pgdata redisdata blobs inbox processing archive failed exports certs; do mkdir -p "/srv/data/$$d"; done;
+        for d in blobs inbox processing archive failed exports certs; do
         find "/srv/data/$$d" ! -user 10001 -exec chown 10001:10001 {} +; done
     volumes:
       - ./data:/srv/data
@@ -109,20 +111,34 @@ services:
 
   app:
     <<: *app
-    # --proxy-headers + FORWARDED_ALLOW_IPS: trust X-Forwarded-* only from
-    # your WAF/proxy's own address(es) — never "*", since this port is
-    # reachable by whatever the firewall allows. See the file header.
-    command:
-      - uvicorn
-      - advisory_hub.main:app
-      - --host=0.0.0.0
-      - --port=8000
-      - --proxy-headers
-      - --no-server-header
-      - --workers=${WEB_CONCURRENCY:-1}
+    # Prepares the certificate when HTTPS_ENABLED=true, then runs uvicorn
+    # (--proxy-headers, WEB_CONCURRENCY workers, no Server header).
+    command: ["python", "-m", "advisory_hub.serve"]
     environment:
       <<: *app-env
-      FORWARDED_ALLOW_IPS: ${TRUSTED_PROXY_IPS:?set TRUSTED_PROXY_IPS in .env to your WAF/reverse proxy's address(es) — comma-separated IPs, not a CIDR; see docs/deployment.md}
+      # X-Forwarded-* headers are trusted only from these peers. Behind a
+      # WAF/reverse proxy, set TRUSTED_PROXY_IPS to its address(es) so the
+      # audit log records real client IPs. Never "*": app's port is
+      # reachable by whatever the firewall allows (D-040). Default trusts
+      # no external peer — right when the app serves HTTPS itself.
+      FORWARDED_ALLOW_IPS: ${TRUSTED_PROXY_IPS:-127.0.0.1}
+    volumes:
+      - ./data/blobs:/data/blobs
+      - ${INBOX_HOST_PATH:-./data/inbox}:/data/inbox
+      - ./data/processing:/data/processing
+      - ./data/archive:/data/archive
+      - ./data/failed:/data/failed
+      - ./data/exports:/data/exports
+      # TLS certificate and key, when the app serves HTTPS: app only.
+      - ./data/certs:/data/certs
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:8000/health/live || curl -fsSk https://localhost:8000/health/live
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
     ports:
       - "${BIND_ADDRESS:-0.0.0.0}:${APP_PORT:-8000}:8000"
     networks: [frontend, backend]

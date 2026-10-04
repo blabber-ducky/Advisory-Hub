@@ -96,13 +96,14 @@ so backing up and restoring is a file operation on one directory (§4).
 | `./data/redisdata` | `redis:/data` | Job queue (AOF/RDB) | Optional — queued jobs only |
 | `./data/inbox` | `/data/inbox` | Watched inbox (unless `INBOX_HOST_PATH` is set) | No — transient |
 | `./data/processing` | `/data/processing` | Worker claim area | No — transient |
+| `./data/certs` | `app` only: `/data/certs` | HTTPS certificate + key when `HTTPS_ENABLED=true` (§7) | **Yes** for a provided certificate (a generated one is simply remade) |
 | `./data/exports` | `/data/exports` | Daily status-export CSVs, kept 30 days (§4) | **Yes** — and copy the latest off the host too |
 
 **Ownership is handled for you.** The app runs as uid 10001. On Linux,
 Docker creates a missing bind-mount folder owned by root, which the app
 can't write to. The one-shot `init-data` container runs before
 `app`/`worker`, creates every folder, and gives `blobs`, `inbox`,
-`processing`, `archive`, `failed` and `exports` to uid 10001. It also fixes anything
+`processing`, `archive`, `failed`, `exports` and `certs` to uid 10001. It also fixes anything
 not owned by uid 10001, such as files a restore copied back as root.
 Postgres and Redis fix their own folders at startup. On the host you'll
 see uid 10001 (or a raw number) as the owner of those folders on Linux;
@@ -158,13 +159,16 @@ Every variable belongs in `.env.example` with a dummy value and a comment.
 | `WEB_CONCURRENCY` | no | **Production files.** uvicorn processes for `app`. Default `1`; each extra costs ~100 MB — raise `app`'s memory limit in the compose file to match |
 | `BIND_ADDRESS` | no | **Compose-level, production file.** Host interface `app`'s port is bound to. Default `0.0.0.0`; set the address of the NIC facing the WAF to keep it off other interfaces |
 | `APP_PORT` | no | **Compose-level.** Host port `app` listens on. Default `8080` in the base/dev file; default `8000` in `docker-compose.prod.yml`, where it's the only published port |
-| `TRUSTED_PROXY_IPS` | yes (production) | **Compose-level**, maps to `FORWARDED_ALLOW_IPS` for uvicorn. Comma-separated literal IP address(es) of your WAF/reverse proxy — **not** `*` and **not** a CIDR. `app`'s port is reachable by whatever the firewall allows, so trusting every peer would let anyone who can reach it spoof `X-Forwarded-For`/`-Proto`; this must name every address the WAF itself connects from. See D-040, deployment.md. |
+| `TRUSTED_PROXY_IPS` | behind a proxy | **Compose-level**, maps to `FORWARDED_ALLOW_IPS` for uvicorn. Comma-separated literal IP address(es) of your WAF/reverse proxy — **not** `*` and **not** a CIDR. Default `127.0.0.1` (no external peer trusted) — right when the app serves HTTPS itself. Behind a proxy, set it, or the audit log shows the proxy's IP for everyone. See D-040, D-045 |
 | `POSTGRES_PASSWORD` | yes (production) | **Compose-level.** Database password, embedded in `DATABASE_URL` by compose — use hex (`openssl rand -hex 32`) so it's URL-safe. Only read when the database volume is first created |
 | `STATUS_EXPORT_ENABLED` | no | Default `true`. The worker's daily status export (§4) |
 | `STATUS_EXPORT_CRON` | no | Default `0 2 * * *` — 02:00 **UTC** (06:00 UAE). Standard 5-field cron. A worker that was down at the time catches up when it starts |
 | `STATUS_EXPORT_DIR` | no | Default `/data/exports` (`./data/exports` on the host) |
 | `STATUS_EXPORT_KEEP_DAYS` | no | Default `30`. Older `status-export-*.csv` files are deleted; nothing else in the folder is touched |
-| `SESSION_COOKIE_SECURE` | no | Default `true`; `false` only for local HTTP dev. The production file forces `true` — users must reach it over HTTPS (via the WAF) or sign-in won't stick. |
+| `HTTPS_ENABLED` | no | Default `false`. `true`: the app port serves HTTPS itself, with `./data/certs/server.crt`+`server.key` if both exist, or a generated self-signed certificate if neither does (§7) |
+| `TLS_HOSTNAMES` | with `HTTPS_ENABLED` | Comma-separated names/IPs users browse to (e.g. DNS name and NAT/LAN IP) — written into a generated certificate; `localhost`/`127.0.0.1` always added |
+| `TLS_CERT_FILE` / `TLS_KEY_FILE` | no | Defaults `/data/certs/server.crt` / `/data/certs/server.key` (`./data/certs` on the host) |
+| `SESSION_COOKIE_SECURE` | no | Default `true`; `false` only for HTTP on an isolated test network. The production file forces `true` — users must reach it over HTTPS (§7) or sign-in loops back to the login page. |
 | `COMPOSE_FILE` | production | **Compose-level.** Which compose file plain `docker compose …` uses: `docker-compose.prod.yml` in production (set by `.env.production.example`). Also stops `docker-compose.override.yml` being applied. |
 | `LOG_LEVEL` | no | Default `INFO` |
 
@@ -400,18 +404,77 @@ Minimum viable signals:
 reachability as separate checks — a single boolean would hide exactly the
 failures worth alerting on.
 
-## 7. TLS is terminated upstream
+## 7. HTTPS
 
-The stack doesn't serve HTTPS itself: `app` speaks plain HTTP on `APP_PORT`,
-and TLS, certificates, HSTS and the HTTP→HTTPS redirect belong to the
-enterprise WAF / reverse proxy in front of it. Requirements on that WAF, and
-how to verify the boundary, are in [deployment.md](deployment.md) §1–3.
+**Sign-in only works over HTTPS.** The session cookie is always `Secure`
+(`SESSION_COOKIE_SECURE=true`), and browsers won't send a `Secure` cookie
+over plain `http://`. So signing in over HTTP accepts the password, then
+lands back on the login page. The one exception is `http://localhost` /
+`http://127.0.0.1`, which browsers treat as secure. That's why plain HTTP
+works on your own machine but loops on a server reached by IP or name,
+e.g. through NAT.
 
-| Here | On the WAF |
+Two ways to provide HTTPS:
+
+| | (a) The app serves HTTPS itself | (b) A WAF / reverse proxy in front |
+|---|---|---|
+| Set | `HTTPS_ENABLED=true` (+ `TLS_HOSTNAMES`) | `HTTPS_ENABLED=false`, `TRUSTED_PROXY_IPS` = the proxy's address(es) |
+| Certificate | `./data/certs/server.crt` + `server.key`, yours or generated (below) | On the proxy |
+| Users browse to | `https://<host>:<APP_PORT>` | Whatever the proxy serves |
+| `http://` | No answer on that port — tell users to use `https://` | Proxy can redirect |
+| HSTS | Not sent | Proxy's job |
+| Best for | Internal deployments, NAT, no proxy available | Organisations with an existing WAF |
+
+### (a) The app serving HTTPS
+
+On start (`python -m advisory_hub.serve`, the image's default command),
+with `HTTPS_ENABLED=true`:
+
+| What's in `./data/certs/` | What happens |
 |---|---|
-| `TRUSTED_PROXY_IPS` = the WAF's own address(es) | Terminate TLS; forward `Host`, `X-Forwarded-For`, `X-Forwarded-Proto` |
-| `SESSION_COOKIE_SECURE=true` (forced in production) | Serve users over HTTPS only — the cookie isn't sent over HTTP |
-| Firewall `APP_PORT` to the WAF only | HSTS, HTTP → HTTPS redirect, certificate renewal |
+| `server.crt` **and** `server.key` | Used as-is: parsed, the key checked against the certificate, expiry checked. **Never modified.** Warnings in the log if it expires within 30 days or doesn't cover a `TLS_HOSTNAMES` entry |
+| Neither | A self-signed certificate (EC P-256, 397 days) is generated for `TLS_HOSTNAMES` + `localhost` + `127.0.0.1`, saved there, and reused on every later start. Renewed automatically 30 days before expiry — only ever *this* generated one |
+| Only one of them | **Refuses to start**, saying which is missing. It's probably half of a real certificate, and generating would orphan it |
+| Expired, unreadable, passphrase-protected key, or key that doesn't match | Refuses to start, with the reason and the fix |
+
+The app log shows which happened (`tls.certificate` with `generated`,
+`self_signed`, `names`, `expires`).
+
+**Using your own certificate** (from your CA): before starting, or with the
+app stopped, put the certificate in `./data/certs/server.crt` (leaf first,
+then any intermediates, PEM) and the **unencrypted** key in
+`./data/certs/server.key`. `init-data` makes them readable to the app.
+Replacing it later works the same way: swap both files and run `docker
+compose up -d`.
+
+**Self-signed**: browsers warn the first time ("Your connection is not
+private"). Accepting the warning, or importing `server.crt` into the
+clients' trust store, lets sign-in work. Put every name and IP users type
+in `TLS_HOSTNAMES` (e.g. `advisoryhub.corp,10.0.4.20`). If you change it
+later, delete both files to regenerate.
+
+```bash
+# .env
+HTTPS_ENABLED=true
+TLS_HOSTNAMES=advisoryhub.corp,10.0.4.20
+# then
+docker compose up -d
+docker compose logs app | grep tls.certificate
+```
+
+Development (`docker compose up` with the override, uvicorn `--reload`)
+always serves HTTP — use `http://localhost`.
+
+### (b) A WAF / reverse proxy in front
+
+The app speaks HTTP to the proxy; requirements on the proxy, and how to
+verify the boundary, are in [deployment.md](deployment.md) §1.
+
+| Here | On the proxy |
+|---|---|
+| `TRUSTED_PROXY_IPS` = the proxy's own address(es) | Terminate TLS; forward `Host`, `X-Forwarded-For`, `X-Forwarded-Proto` |
+| `SESSION_COOKIE_SECURE=true` (forced in production) | Serve users over HTTPS only |
+| Firewall `APP_PORT` to the proxy only | HSTS, HTTP → HTTPS redirect, certificate renewal |
 
 ## 8. Images and publishing
 

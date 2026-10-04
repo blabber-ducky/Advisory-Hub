@@ -72,6 +72,18 @@ class Settings(BaseSettings):
     status_export_dir: Path = Path("/data/exports")
     status_export_keep_days: int = 30
 
+    # ─── HTTPS served by the app itself (no proxy) ───────────────────────────
+    #: When on, ``python -m advisory_hub.serve`` serves HTTPS on the app port,
+    #: using tls_cert_file/tls_key_file if both exist, or generating a
+    #: self-signed certificate for ``tls_hostnames`` if neither does. See
+    #: core.security.tls and docs/operations.md §7.
+    https_enabled: bool = False
+    tls_cert_file: Path = Path("/data/certs/server.crt")
+    tls_key_file: Path = Path("/data/certs/server.key")
+    #: Comma-separated DNS names / IPs users browse to (e.g. the NAT address).
+    #: Goes into a generated certificate; localhost and 127.0.0.1 are added.
+    tls_hostnames: str = ""
+
     # ─── Web ─────────────────────────────────────────────────────────────────
     session_cookie_secure: bool = True
     session_max_age_seconds: int = 43_200
@@ -91,6 +103,10 @@ class Settings(BaseSettings):
     @property
     def allowlisted_hosts(self) -> tuple[str, ...]:
         return tuple(h.strip().lower() for h in self.outbound_allowlist.split(",") if h.strip())
+
+    @property
+    def tls_hostname_list(self) -> list[str]:
+        return [h.strip() for h in self.tls_hostnames.split(",") if h.strip()]
 
     @property
     def is_production(self) -> bool:

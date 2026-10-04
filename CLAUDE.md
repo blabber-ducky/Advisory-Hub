@@ -120,7 +120,7 @@ docker/            # Dockerfile (app + worker + migrate image)
 docker-compose.yml           # base stack (pulls images)
 docker-compose.override.yml  # dev: builds locally, reload — auto-applied
 docker-compose.prod.yml      # production, self-contained, behind your WAF — see docs/deployment.md
-data/                        # all persistent data, ./data/<volume> (git- and docker-ignored)
+data/                        # all persistent data, ./data/<volume> (git- and docker-ignored); certs/ = HTTPS key+cert
 .env.example / .env.production.example
 ```
 
@@ -129,6 +129,27 @@ data/                        # all persistent data, ./data/<volume> (git- and do
 ## 4. Progress log
 
 Newest first. Update this when work lands.
+
+### 2026-10-04 — HTTPS served by the app itself (no proxy needed)
+- **Why**: behind NAT with no proxy, sign-in reloaded the login page — the
+  `Secure` session cookie isn't sent over `http://` (browsers exempt only
+  `localhost`, hence "works on my machine"). Asked for app-handled HTTPS
+  with a provided certificate or a generated self-signed one. D-045.
+- New `core/security/tls.py` (`ensure_certificate()`: use provided pair
+  unmodified after validation / generate self-signed EC P-256 for
+  `TLS_HOSTNAMES` / refuse a half-present pair; renews only its own
+  self-signed cert) and `advisory_hub/serve.py` (launcher; now the image's
+  `CMD` and the production app command). Settings `HTTPS_ENABLED`,
+  `TLS_HOSTNAMES`, `TLS_CERT_FILE`, `TLS_KEY_FILE`; `./data/certs` mounted
+  into `app` only; `init-data` owns it; health checks try HTTP then HTTPS.
+  `TRUSTED_PROXY_IPS` now optional (default `127.0.0.1`).
+- Docs: operations.md §7 rewritten (both HTTPS modes, certificate table,
+  the localhost explanation), deployment.md (choose (a)/(b), verify,
+  troubleshooting incl. the login loop), `.env` examples, architecture,
+  README.
+- **Verified**: 17 new tests; real stack via the Mac's LAN IP: cert
+  generated with that IP as SAN, HTTP no answer, HTTPS 204, sign-in → tracker
+  (no loop); a provided certificate from a stand-in CA served unchanged.
 
 ### 2026-10-04 — Status export: on demand, daily, and re-importable to restore
 - **On request** ("export the status of all advisories … must be

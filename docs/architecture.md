@@ -63,11 +63,12 @@
 ```
 
 In production (`docker-compose.prod.yml`) `app` is the only published
-service, behind an enterprise WAF / reverse proxy that terminates TLS
-outside the stack; Postgres and Redis sit on an internal network with no
-outside route; a one-shot `migrate` container applies migrations before
-`app`/`worker` start. Topology, hardening and the WAF's responsibilities are
-in [deployment.md](deployment.md) §1; D-040.
+service. It serves HTTPS itself (`HTTPS_ENABLED`, with a provided or
+generated certificate — `core/security/tls.py`, D-045) or sits behind an
+enterprise WAF / reverse proxy that terminates TLS (D-040). Postgres and
+Redis sit on an internal network with no outside route; a one-shot
+`migrate` container applies migrations before `app`/`worker` start.
+Topology and hardening are in [deployment.md](deployment.md) §1.
 
 ## 3. Components
 
@@ -496,7 +497,7 @@ REST API: the check previously passed any logged-in user regardless of role.
 | Credential theft | AES-GCM (Fernet) at rest with key from env/KMS; never returned by any endpoint |
 | Unattributable changes | Mandatory comment + `status_change` + append-only `audit_log` |
 | Token leakage | Hashed at rest, scoped, revocable, last-used tracked |
-| Credentials / session cookies sniffed on the network | TLS terminated by the enterprise WAF in front of the stack; session cookie always `Secure` in production, so it's never sent over plain HTTP (deployment.md §1) |
+| Credentials / session cookies sniffed on the network | HTTPS — served by the app itself (`HTTPS_ENABLED`, TLS via uvicorn, certificate validated at start) or by the WAF in front; session cookie always `Secure` in production, so it's never sent over plain HTTP (deployment.md §1) |
 | Spoofed `X-Forwarded-For`/`-Proto` (audit-log IP forgery) by anyone who can reach `app`'s port | `FORWARDED_ALLOW_IPS` pinned to `TRUSTED_PROXY_IPS` — only the operator-declared WAF address(es) are trusted to set those headers; the firewall, not this app, must keep everyone else from reaching the port at all (deployment.md §1, D-040) |
 
 ## 8. Deliberate non-goals (for now)

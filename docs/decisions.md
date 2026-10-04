@@ -1219,6 +1219,44 @@ stack's data is in its own `./data`); the deployment's containers were
 recreated from its own folder within minutes and verified. Prevented from
 now on by `name: advisory-hub-dev` in `docker-compose.override.yml`.
 
+## D-045 — The app can serve HTTPS itself, with a provided or generated self-signed certificate
+
+**Date:** 2026-10-04 · **Status:** Accepted · **Reverses** the "TLS in uvicorn" rejection in D-035 · **Amends** D-040 (`TRUSTED_PROXY_IPS` optional)
+
+**Why**: deployed behind NAT with no proxy, the login page took the
+password and reloaded — the session cookie is `Secure`, and browsers only
+send it over HTTPS or to `localhost` (which is why the same setup worked on
+the developer's machine). Asked: HTTPS without a proxy — a self-signed
+certificate generated if none exists, or a provided one, handled by the
+application.
+
+**Decision**: `HTTPS_ENABLED=true` makes `python -m advisory_hub.serve` (now
+the image's default command) start uvicorn with TLS on the same app port.
+`core/security/tls.py` decides the certificate:
+
+| `./data/certs/` holds | Result |
+|---|---|
+| `server.crt` + `server.key` | Used unmodified, after checks: PEM, key matches, not expired; warnings for ≤30 days left or uncovered `TLS_HOSTNAMES` |
+| neither | Self-signed EC P-256, 397 days, SANs = `TLS_HOSTNAMES` + localhost + 127.0.0.1 (IPs as IP SANs); key `0600`, atomic write; reused, renewed ≤30 days before expiry — only certificates it generated itself (marked by subject Organisation) |
+| only one | Refuse to start — likely half of a real certificate |
+
+| Choice | Why |
+|---|---|
+| uvicorn's own TLS, generated with `cryptography` | Asked for no proxy; both are already dependencies — no new package, no OpenSSL CLI in the image |
+| Same port, no HTTP→HTTPS redirect listener | A redirect needs a second listener and knowledge of the published port; for an internal tool, "use https://" in the docs is the better trade. D-035's other objections (cipher policy in Python, no graceful reload) are accepted for this deployment shape; the WAF option remains for those who need them |
+| Certificate folder mounted into `app` only | The worker never needs the private key |
+| Health checks try HTTP, then HTTPS with `-k` | Liveness only; works in both modes, and in the compose files too for images built before this |
+| `TRUSTED_PROXY_IPS` now optional, default `127.0.0.1` | With no proxy, requiring it made no sense. The default trusts no external peer — safe; still never `*` |
+| Development stays HTTP | The override runs uvicorn `--reload` directly; `http://localhost` already satisfies browsers |
+
+**Verified**: fresh image, scratch stack, `HTTPS_ENABLED=true`, browsed via
+the host's **LAN IP** (the failing case): certificate generated with that IP
+as a SAN; plain HTTP got no answer; HTTPS health 204; sign-in POST → 303,
+`Secure` cookie stored and returned, tracker page shown — no loop. Then a
+provided certificate from a stand-in CA: served unchanged, not regenerated.
+17 tests (generation, reuse, renewal of own vs. never touching provided,
+mismatch, passphrase, expiry, half-present, launcher options).
+
 ---
 
 ## Open decisions

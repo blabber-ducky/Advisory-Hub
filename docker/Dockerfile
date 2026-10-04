@@ -35,7 +35,10 @@ USER appuser
 
 EXPOSE 8000
 
+# HTTP, or HTTPS when HTTPS_ENABLED is on (-k: the certificate may be
+# self-signed, and only liveness is being checked).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -fsS http://localhost:8000/health/live || exit 1
+    CMD curl -fsS http://localhost:8000/health/live || curl -fsSk https://localhost:8000/health/live || exit 1
 
-CMD ["uvicorn", "advisory_hub.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Prepares the TLS certificate when HTTPS_ENABLED is on, then runs uvicorn.
+CMD ["python", "-m", "advisory_hub.serve"]

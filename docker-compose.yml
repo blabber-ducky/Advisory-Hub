@@ -49,6 +49,7 @@ x-app-image: &app-image
 #   ./data/blobs       content store        ./data/inbox       watched inbox
 #   ./data/processing  claim area           (unless INBOX_HOST_PATH is set)
 #   ./data/exports     daily status-export CSVs (importable backup)
+#   ./data/certs       HTTPS certificate when HTTPS_ENABLED=true (app only)
 x-app-volumes: &app-volumes
   - ./data/blobs:/data/blobs
   - ${INBOX_HOST_PATH:-./data/inbox}:/data/inbox
@@ -71,8 +72,8 @@ services:
     command:
       - >-
         set -e;
-        for d in pgdata redisdata blobs inbox processing archive failed exports; do mkdir -p "/srv/data/$$d"; done;
-        for d in blobs inbox processing archive failed exports; do
+        for d in pgdata redisdata blobs inbox processing archive failed exports certs; do mkdir -p "/srv/data/$$d"; done;
+        for d in blobs inbox processing archive failed exports certs; do
         find "/srv/data/$$d" ! -user 10001 -exec chown 10001:10001 {} +; done
     volumes:
       - ./data:/srv/data
@@ -111,13 +112,32 @@ services:
     <<: *app-image
     environment: *app-env
     ports:
+      # HTTP, or HTTPS when HTTPS_ENABLED=true in .env (docs/operations.md §7)
       - "${APP_PORT:-8080}:8000"
+    # Same as the image's HEALTHCHECK; repeated so it also holds for images
+    # built before the app could serve HTTPS itself.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:8000/health/live || curl -fsSk https://localhost:8000/health/live
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
     # INBOX_HOST_PATH points the watched inbox at another host folder (e.g.
     # where Power Automate / a mail rule drops emails) instead of
     # ./data/inbox — an absolute path in .env, e.g.
     # INBOX_HOST_PATH=/srv/advisory-hub/inbox. uid 10001 must be able to
     # write it; init-data only manages ./data.
-    volumes: *app-volumes
+    volumes:
+      - ./data/blobs:/data/blobs
+      - ${INBOX_HOST_PATH:-./data/inbox}:/data/inbox
+      - ./data/processing:/data/processing
+      - ./data/archive:/data/archive
+      - ./data/failed:/data/failed
+      - ./data/exports:/data/exports
+      # The TLS certificate and key: the app only — the worker never needs them.
+      - ./data/certs:/data/certs
     depends_on:
       init-data: {condition: service_completed_successfully}
       postgres: {condition: service_healthy}
