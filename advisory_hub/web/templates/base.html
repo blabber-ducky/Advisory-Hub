@@ -99,6 +99,18 @@
       padding: .55rem 1rem; font-size: .95rem; font-weight: 550; cursor: pointer;
     }
     button:hover { background: var(--button-hover); }
+    /* A <label> wrapping a visually hidden file input, styled as a button.
+       The input stays focusable, so keyboard users get the ring below. */
+    .upload-button {
+      position: relative; display: inline-block; margin: 0;
+      background: var(--button); color: var(--on-button);
+      border-radius: 7px; padding: .55rem 1rem; font-size: .95rem; font-weight: 550; cursor: pointer;
+    }
+    .upload-button:hover { background: var(--button-hover); }
+    .upload-button:focus-within { outline: 2px solid var(--brand); outline-offset: 2px; }
+    .upload-button input {
+      position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden;
+    }
     button.link { background: none; color: var(--muted); padding: 0; font-weight: 400; }
     button.link:hover { background: none; color: var(--ink); }
     .theme-toggle { display: inline-flex; align-items: center; gap: .3rem; font-size: .85rem; }

@@ -76,6 +76,13 @@ class TestInbox:
         assert "BOOM" in sidecar.read_text()
         assert inbox.failed_count() == 1
 
+    def test_failure_with_the_pipelines_error_shape_does_not_raise(self, inbox: Inbox) -> None:
+        """`_process_one` passes a "file" key; logging it must not collide."""
+        claimed = inbox.claim(_drop(inbox, "a.msg"))
+        assert claimed is not None
+        inbox.fail_file(claimed, {"error": "BOOM", "file": "a.msg", "traceback": None})
+        assert inbox.failed_count() == 1
+
     def test_nothing_is_ever_overwritten(self, inbox: Inbox) -> None:
         """Regulators resend; filenames repeat. Both copies must survive."""
         first = inbox.claim(_drop(inbox, "same.msg", b"one"))

@@ -131,6 +131,31 @@ data/                        # all persistent data, ./data/<volume> (git- and do
 
 Newest first. Update this when work lands.
 
+### 2026-10-05 — Upload email from the web app; header on IOCs / Affected Software
+- **On request.** Tracker page "Upload email" button (ANALYST+,
+  `POST /inbox/upload`, multiple `.eml`/`.msg`): `ingest.pipeline.ingest_uploads()`
+  validates every file first (extension, empty, `UPLOAD_MAX_BYTES` 50 MB,
+  `UPLOAD_MAX_FILES` 20 — new settings), then `Inbox.deposit()`s each into
+  the inbox (`.tmp` + rename, sanitised basename) and claims/processes it
+  through the normal `_process_one()` → archive/failed path. Ingest audit
+  entries name the uploader (actor now threaded through `_process_one`).
+  Per-file result (Ingested / Already ingested / Queued / Failed, linked to
+  the advisory) swapped in above the dashboard.
+- **Header missing on `/iocs` and `/affected-software`**: neither route put
+  `principal` in the page context, and `base.html` only renders the header
+  when it's set. Fixed; regression test covers every top-level page.
+- **Latent bug fixed**: `Inbox.fail_file()` logged `file=` alongside an error
+  dict that `_process_one()` always gives a `"file"` key → `TypeError` after
+  the move, aborting the rest of the batch the first time a message failed.
+  Never hit in the Test-Deployments stack yet (no failures in its logs).
+- **Verified**: 717 tests passing (new `tests/test_upload.py` + a fail_file
+  regression); `ruff`/`mypy --strict` clean; header test fails without the
+  fix. Real HTTP run against a scratch DB: two real corpus `.msg` uploaded
+  together → both ingested and linked, re-upload → "Already ingested", `.pdf`
+  rejected with nothing written, files archived, audit actor = the uploader.
+  Known: a plain-text file named `.eml` is ingested (Python's email parser
+  accepts any text) — same as an inbox drop today.
+
 ### 2026-10-05 — `scripts/tracker-to-csv.sh`
 - **On request** (a script for the manual tracker Excel → CSV conversion). A
   wrapper, not a second converter: runs the existing `advisory-hub

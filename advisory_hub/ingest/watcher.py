@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import errno
 import os
+import re
 import shutil
 from collections.abc import Iterator
 from datetime import date
@@ -59,6 +60,19 @@ class Inbox:
             (p for p in self.inbox.iterdir() if p.is_file() and _is_message(p)),
             key=lambda p: p.stat().st_mtime,
         )
+
+    def deposit(self, filename: str, data: bytes) -> Path:
+        """Drop a message into the inbox the way Power Automate must: write
+        ``<name>.tmp``, then rename, so ``pending()`` never sees half a file.
+        ``filename`` is user-supplied — only a sanitised basename is used."""
+        name = safe_message_name(filename)
+        if name is None:
+            raise ValueError(f"Not an email file (.eml or .msg): {filename!r}")
+        target = _unique(self.inbox / name)
+        tmp = target.with_name(target.name + ".tmp")
+        tmp.write_bytes(data)
+        os.replace(tmp, target)
+        return target
 
     def claim(self, path: Path) -> Path | None:
         """Atomically claim a file. Returns ``None`` if another worker won."""
@@ -143,9 +157,11 @@ class Inbox:
         destination.with_suffix(destination.suffix + ".error.json").write_text(
             json.dumps(error, indent=2, default=str), encoding="utf-8"
         )
-        log.error(
-            "inbox.failed", file=destination.name, **{k: str(v)[:200] for k, v in error.items()}
-        )
+        # `error` usually carries its own "file" key (the original name) —
+        # merged, not passed alongside, or the logger call raises TypeError.
+        fields = {k: str(v)[:200] for k, v in error.items()}
+        fields["file"] = destination.name
+        log.error("inbox.failed", **fields)
         return destination
 
     def failed_count(self) -> int:
@@ -156,6 +172,19 @@ class Inbox:
 
 def _is_message(path: Path) -> bool:
     return path.suffix.lower() in MESSAGE_EXTENSIONS
+
+
+def safe_message_name(filename: str) -> str | None:
+    """A filesystem-safe basename for an uploaded message, or ``None`` if it
+    isn't a message extension. Strips any directory part (either separator),
+    leading/trailing dots, and anything outside a conservative character set."""
+    base = re.split(r"[\\/]", filename)[-1]
+    base = re.sub(r"[^A-Za-z0-9._ -]", "_", base).strip(" .")
+    stem, dot, suffix = base.rpartition(".")
+    if not dot or f".{suffix.lower()}" not in MESSAGE_EXTENSIONS:
+        return None
+    stem = stem.strip(" .")[:150] or "upload"
+    return f"{stem}.{suffix.lower()}"
 
 
 def _unique(path: Path) -> Path:

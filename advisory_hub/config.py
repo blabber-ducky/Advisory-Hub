@@ -34,6 +34,9 @@ class Settings(BaseSettings):
 
     # ─── Ingestion (Phase 1) ─────────────────────────────────────────────────
     inbox_poll_seconds: int = 30
+    #: Caps for .eml/.msg files uploaded from the tracker page (per file / per upload).
+    upload_max_bytes: int = 52_428_800  # 50 MB
+    upload_max_files: int = 20
     pdf_max_bytes: int = 52_428_800
     pdf_max_pages: int = 500
     pdf_timeout_seconds: int = 120

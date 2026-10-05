@@ -54,6 +54,7 @@ def index(
         return templates.TemplateResponse(request, "_iocs_table.html", context)
     context.update(
         {
+            "principal": principal,
             "title": "IOCs",
             "active_nav": "iocs",
             "types": list(IocType),

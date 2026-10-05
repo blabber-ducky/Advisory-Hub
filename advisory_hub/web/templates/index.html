@@ -6,6 +6,16 @@
     <a href="/status-export.csv" title="Every advisory's status and comment history — re-importable via Import">Export statuses (CSV)</a>
   {% if can_scan_inbox %}
     <a href="/tracker-import">Import manual tracker</a>
+    {# The label is the button; choosing files submits straight away. #}
+    <form hx-post="/inbox/upload" hx-encoding="multipart/form-data" hx-target="#upload-result"
+          hx-indicator="#upload-indicator" hx-on::after-request="this.reset()" style="margin:0">
+      <label class="upload-button" title="Ingest .eml or .msg files, the same as an inbox drop">
+        <input type="file" name="files" accept=".eml,.msg" multiple
+               onchange="if (this.files.length) this.form.requestSubmit()">
+        Upload email
+        <span id="upload-indicator" class="htmx-indicator">&hellip;</span>
+      </label>
+    </form>
     <form hx-post="/inbox/scan" hx-target="body" hx-swap="none" style="margin:0">
       <button type="submit" hx-indicator="#inbox-scan-indicator">
         Scan inbox now
@@ -15,6 +25,8 @@
   {% endif %}
   </div>
 </div>
+
+<div id="upload-result"></div>
 
 {% if inbox_scan_result %}
 <div class="notice">

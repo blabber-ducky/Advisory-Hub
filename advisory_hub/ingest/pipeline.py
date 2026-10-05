@@ -7,6 +7,7 @@ explicit — nothing is silently dropped, and the original file always survives.
 from __future__ import annotations
 
 import traceback
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,7 +19,7 @@ from ..db import session_scope
 from ..logging import get_logger
 from .message import MessageParseError, parse_message
 from .parser import parse_advisory
-from .watcher import Inbox
+from .watcher import Inbox, safe_message_name
 
 log = get_logger(__name__)
 
@@ -26,7 +27,7 @@ log = get_logger(__name__)
 @dataclass(slots=True)
 class IngestOutcome:
     path: Path
-    status: str  # INGESTED | DUPLICATE | FAILED
+    status: str  # INGESTED | DUPLICATE | FAILED | QUEUED
     advisory_id: str | None = None
     external_ref: str | None = None
     error: str | None = None
@@ -83,9 +84,67 @@ def process_inbox(*, limit: int = 50, inbox: Inbox | None = None) -> list[Ingest
     return outcomes
 
 
-def _process_one(path: Path, inbox: Inbox, blobs: BlobStore) -> IngestOutcome:
+class UploadRejectedError(ValueError):
+    """An upload failed validation; nothing was written."""
+
+
+def ingest_uploads(
+    uploads: Sequence[tuple[str, bytes]],
+    *,
+    actor: Actor | None = None,
+    inbox: Inbox | None = None,
+) -> list[IngestOutcome]:
+    """Ingest .eml/.msg files uploaded through the web UI.
+
+    Each file goes through the inbox exactly like a Power Automate drop —
+    deposited, claimed, then archived or moved to ``failed/`` — so an upload
+    leaves the same trail as any other message, and a crash mid-request
+    leaves the file in the inbox for the poller rather than losing it.
+    Every file is validated before any is written: all or nothing.
+    """
+    if not uploads:
+        raise UploadRejectedError("Choose at least one .eml or .msg file.")
+    if len(uploads) > settings.upload_max_files:
+        raise UploadRejectedError(
+            f"Too many files ({len(uploads)}); upload at most {settings.upload_max_files} at once."
+        )
+    for filename, data in uploads:
+        if safe_message_name(filename) is None:
+            raise UploadRejectedError(f"{filename!r} is not an email file (.eml or .msg).")
+        if not data:
+            raise UploadRejectedError(f"{filename!r} is empty.")
+        if len(data) > settings.upload_max_bytes:
+            limit_mb = settings.upload_max_bytes // (1024 * 1024)
+            raise UploadRejectedError(f"{filename!r} is larger than {limit_mb} MB.")
+
+    inbox = inbox or Inbox()
+    blobs = FilesystemBlobStore(settings.blob_root)
+    outcomes: list[IngestOutcome] = []
+    for filename, data in uploads:
+        deposited = inbox.deposit(filename, data)
+        claimed = inbox.claim(deposited)
+        if claimed is None:
+            # The worker's poller claimed it first; it will be processed there.
+            outcomes.append(IngestOutcome(deposited, "QUEUED"))
+            continue
+        outcomes.append(_process_one(claimed, inbox, blobs, actor=actor))
+
+    log.info(
+        "inbox.upload_complete",
+        total=len(outcomes),
+        ingested=sum(o.status == "INGESTED" for o in outcomes),
+        duplicates=sum(o.status == "DUPLICATE" for o in outcomes),
+        failed=sum(o.status == "FAILED" for o in outcomes),
+        queued=sum(o.status == "QUEUED" for o in outcomes),
+    )
+    return outcomes
+
+
+def _process_one(
+    path: Path, inbox: Inbox, blobs: BlobStore, *, actor: Actor | None = None
+) -> IngestOutcome:
     try:
-        outcome = ingest_file(path, blobs=blobs)
+        outcome = ingest_file(path, blobs=blobs, actor=actor)
     except Exception as exc:  # belt and braces around the worker loop
         outcome = IngestOutcome(path, "FAILED", error=f"UNEXPECTED: {type(exc).__name__}: {exc}")
 

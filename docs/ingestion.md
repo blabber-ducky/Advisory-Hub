@@ -59,8 +59,14 @@ assumed before seeing the data. `extract-msg` parses 135/135 with zero errors.
   the filename is a lossy copy of the subject. Parse the subject from the message
   properties, never from the filename.
 
+**Manual upload.** "Upload email" on the tracker page (ANALYST+) follows the
+same contract: the file is written into the inbox as `.tmp` + rename (under a
+sanitised basename — the upload's filename is user input), then claimed and
+processed like any drop, ending in `archive/` or `failed/`. Uploads are
+attributed to the uploader in the audit log.
+
 ```
-/data/inbox/         flow drops here
+/data/inbox/         flow drops here (and tracker-page uploads)
 /data/processing/    claimed by a worker; crash-recovered on startup
 /data/archive/YYYY-MM-DD/
 /data/failed/        + .error.json sidecar

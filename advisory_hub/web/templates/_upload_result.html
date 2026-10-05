@@ -1,0 +1,30 @@
+{# Result of POST /inbox/upload, swapped into #upload-result on the tracker page. #}
+{% if error %}
+<div class="error" role="alert">{{ error }}</div>
+{% else %}
+<div class="notice" role="status">
+  <strong>Upload complete.</strong>
+  <table class="product-table" style="margin-top:.5rem">
+    <tbody>
+    {% for row in rows %}
+    {% set o = row.outcome %}
+    <tr>
+      <td>{{ row.name }}</td>
+      <td>
+        {% if o.status == 'INGESTED' %}<span class="badge badge-good">Ingested</span>
+        {% elif o.status == 'DUPLICATE' %}<span class="badge badge-neutral">Already ingested</span>
+        {% elif o.status == 'QUEUED' %}<span class="badge badge-neutral">Queued for the worker</span>
+        {% else %}<span class="badge badge-critical">Failed</span>{% endif %}
+      </td>
+      <td>
+        {% if o.advisory_id %}<a href="/advisories/{{ o.advisory_id }}">{{ o.external_ref or 'Open advisory' }}</a>
+        {% elif o.error %}<span class="muted">{{ o.error }}</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <a href="/" style="font-size:.85rem">Refresh the tracker</a>
+</div>
+{% endif %}

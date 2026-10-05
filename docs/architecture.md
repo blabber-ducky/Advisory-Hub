@@ -117,6 +117,16 @@ swaps. No Node build step, one deployable, one language.
   sweep — the same function the poller and `advisory-hub watch` call, safe
   to run concurrently since `Inbox.claim()`'s atomic rename means only one
   caller ever wins a given file.
+  An "Upload email" button (ANALYST+, `POST /inbox/upload`) takes one or
+  more `.eml`/`.msg` files (≤ `UPLOAD_MAX_FILES` per upload, each
+  ≤ `UPLOAD_MAX_BYTES`) and runs `ingest.pipeline.ingest_uploads()`: every
+  file is validated first (all or nothing), then deposited into the inbox
+  (`.tmp` + rename, sanitised basename), claimed, and processed like any
+  drop — archived or moved to `failed/` with a sidecar, never discarded.
+  The ingest audit entry names the uploader, not `system`. A file the
+  worker's poller claims first is reported "Queued for the worker". The
+  result (per file: Ingested / Already ingested / Failed + reason, linked
+  to its advisory) is swapped in above the dashboard.
 - **Import manual tracker** (`/tracker-import`, ANALYST+, linked from the
   tracker page): upload the team's spreadsheet tracker (`.xlsx`) or the CSV
   converted from it, preview, then apply — statuses and comments brought

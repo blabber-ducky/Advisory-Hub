@@ -11,7 +11,7 @@ from enum import Enum
 from pathlib import Path
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session as DbSession
@@ -117,6 +117,37 @@ def scan_inbox(
     response = Response(status_code=200)
     response.headers["HX-Redirect"] = f"/?{urlencode(counts)}"
     return response
+
+
+@router.post("/inbox/upload", response_class=HTMLResponse)
+async def upload_messages(
+    request: Request,
+    files: list[UploadFile] = File(default=[]),
+    principal: Principal = Depends(_require_web_principal),
+) -> HTMLResponse:
+    """Ingest .eml/.msg files uploaded from the tracker page — through the
+    same inbox → archive/failed path as a Power Automate drop (see
+    `ingest.pipeline.ingest_uploads()`), attributed to the uploader."""
+    try:
+        principal.require_role(Role.ANALYST)
+    except PermissionDeniedError:
+        raise HTTPException(status_code=403, detail="Insufficient role") from None
+
+    from starlette.concurrency import run_in_threadpool
+
+    from ..ingest.pipeline import UploadRejectedError, ingest_uploads
+
+    uploads = [(f.filename or "", await f.read()) for f in files if f.filename]
+    actor = principal.to_actor(request.client.host if request.client else None)
+    try:
+        outcomes = await run_in_threadpool(ingest_uploads, uploads, actor=actor)
+    except UploadRejectedError as exc:
+        return templates.TemplateResponse(request, "_upload_result.html", {"error": str(exc)})
+    rows = [
+        {"name": original, "outcome": outcome}
+        for (original, _), outcome in zip(uploads, outcomes, strict=True)
+    ]
+    return templates.TemplateResponse(request, "_upload_result.html", {"rows": rows})
 
 
 def _inbox_scan_result(request: Request) -> dict[str, int] | None:

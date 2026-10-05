@@ -149,6 +149,8 @@ Every variable belongs in `.env.example` with a dummy value and a comment.
 | `INBOX_HOST_PATH` | no | **Compose-level only, not read by the app.** Absolute host path mounted at `/data/inbox` in place of `./data/inbox` — set this to point the watcher at a folder another system writes emails into. Must be writable by uid 10001. |
 | `COMPOSE_PROJECT_NAME` | no | **Compose-level.** Overrides the project name (`advisory-hub`). Set it when more than one stack runs on the same host, or they replace each other's containers (§1) |
 | `INBOX_POLL_SECONDS` | no | Default `30` |
+| `UPLOAD_MAX_BYTES` | no | Default `52428800` (50 MB) — per-file cap for `.eml`/`.msg` uploaded from the tracker page ("Upload email") |
+| `UPLOAD_MAX_FILES` | no | Default `20` — files per upload from the tracker page |
 | `NVD_API_KEY` | recommended | Raises the rate limit from 5 → 50 requests per 30s. **Overridden by an admin-panel-configured key** (`/admin`, ADMIN role) if one is set — see docs/decisions.md D-031. Either way works; the admin panel takes effect immediately, no restart. |
 | `NVD_ENABLED` | no | Default `true`; `false` for air-gapped operation. Also overridable per D-031 — disabling from `/admin` wins over this. |
 | `VT_API_KEY` | no | VirusTotal API key for the analyst-triggered "Check on VirusTotal" IOC action. Same admin-panel override as `NVD_API_KEY`. Unset (both here and in the admin panel): the button/endpoint still exists, but returns a clear "not configured" error (`502`) rather than being hidden. |

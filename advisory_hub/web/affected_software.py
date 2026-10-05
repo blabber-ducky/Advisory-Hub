@@ -40,7 +40,9 @@ def index(
     context = _table_context(db, principal)
     if request.headers.get("hx-request") == "true":
         return templates.TemplateResponse(request, "_affected_software_table.html", context)
-    context.update({"title": "Affected Software", "active_nav": "affected_software"})
+    context.update(
+        {"principal": principal, "title": "Affected Software", "active_nav": "affected_software"}
+    )
     return templates.TemplateResponse(request, "affected_software_index.html", context)
 
 
