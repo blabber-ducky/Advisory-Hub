@@ -4,7 +4,7 @@
   <h1 style="font-size:1.3rem;margin:0">Affected software</h1>
   <div style="display:flex;gap:.5rem">
     <button
-      type="button"
+      type="button" class="secondary"
       hx-get="/affected-software"
       hx-target="#affected-software-table"
       hx-swap="innerHTML"
@@ -14,6 +14,7 @@
     </button>
     {% if can_refresh %}
     <button
+      type="button"
       hx-post="/affected-software/refresh"
       hx-target="#affected-software-table"
       hx-swap="innerHTML"

@@ -44,6 +44,7 @@ from .enums import (
     RelationDetectedBy,
     RelationKind,
     Severity,
+    SourceMethod,
     TtpKind,
 )
 
@@ -81,6 +82,10 @@ class Advisory(Base, UUIDPrimaryKey, TimestampMixin):
 
     source_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("source.id", ondelete="RESTRICT"), index=True
+    )
+    #: How ``source_id`` was decided. MANUAL survives re-parsing.
+    source_method: Mapped[SourceMethod] = enum_column(
+        SourceMethod, nullable=False, default=SourceMethod.SENDER
     )
     #: The regulator's own advisory number, e.g. "DOH-2026550".
     external_ref: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)

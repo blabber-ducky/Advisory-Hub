@@ -88,30 +88,62 @@
     }
     .muted { color: var(--muted); }
     label { display: block; font-size: .85rem; font-weight: 550; margin-bottom: .3rem; }
-    input[type=email], input[type=password] {
-      width: 100%; padding: .55rem .7rem; border: 1px solid var(--border);
+    input[type=email], input[type=password], input[type=text], input[type=url], input[type=number] {
+      box-sizing: border-box; height: var(--control-h);
+      width: 100%; padding: 0 .7rem; border: 1px solid var(--border);
       border-radius: 7px; background: var(--bg); color: var(--ink); font-size: .95rem;
     }
     input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
-    button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-    button {
-      background: var(--button); color: var(--on-button); border: 0; border-radius: 7px;
-      padding: .55rem 1rem; font-size: .95rem; font-weight: 550; cursor: pointer;
-    }
-    button:hover { background: var(--button-hover); }
-    /* A <label> wrapping a visually hidden file input, styled as a button.
-       The input stays focusable, so keyboard users get the ring below. */
-    .upload-button {
-      position: relative; display: inline-block; margin: 0;
+    /* ─── Buttons — one size everywhere ─────────────────────────────────
+       Every button (and the label-as-button for file uploads, and the
+       native file picker's button) shares one height, padding, font and
+       radius. Primary is the default; .secondary is the same size, quieter,
+       for an action that sits beside a primary one (Refresh, Test, Scan).
+       Inputs and selects that sit next to buttons use the same height so
+       toolbars line up. */
+    :root { --control-h: 2.25rem; }
+    button, .upload-button, input[type=file]::file-selector-button {
+      box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
+      gap: .35rem; height: var(--control-h); padding: 0 1rem; margin: 0;
+      border: 1px solid transparent; border-radius: 7px;
       background: var(--button); color: var(--on-button);
-      border-radius: 7px; padding: .55rem 1rem; font-size: .95rem; font-weight: 550; cursor: pointer;
+      font-family: inherit; font-size: .875rem; font-weight: 600; line-height: 1;
+      white-space: nowrap; cursor: pointer; vertical-align: middle;
+      transition: background-color .12s, border-color .12s;
     }
-    .upload-button:hover { background: var(--button-hover); }
+    button:hover, .upload-button:hover { background: var(--button-hover); }
+    button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+    button.secondary, input[type=file]::file-selector-button {
+      background: var(--surface); color: var(--accent); border-color: var(--border);
+    }
+    button.secondary:hover, input[type=file]::file-selector-button:hover {
+      background: color-mix(in srgb, var(--brand) 8%, var(--surface)); border-color: var(--brand);
+    }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    input[type=file]::file-selector-button { margin-right: .7rem; }
+    input[type=file] { font-size: .85rem; color: var(--muted); }
+    /* The label wraps a visually hidden file input, which stays focusable,
+       so keyboard users get the ring below. */
+    .upload-button { position: relative; }
     .upload-button:focus-within { outline: 2px solid var(--brand); outline-offset: 2px; }
-    .upload-button input {
-      position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden;
+    .upload-button input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+    /* Controls that share a row with a button. */
+    .filter-bar select, .filter-bar input[type=search], .inline-form select,
+    .admin-users select, .add-user select, .add-user input, .pw-reset input,
+    .status-form select {
+      box-sizing: border-box; height: var(--control-h);
     }
-    button.link { background: none; color: var(--muted); padding: 0; font-weight: 400; }
+    .button-row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: .4rem; }
+    .inline-form { display: inline-flex; gap: .4rem; align-items: center; margin: 0; }
+    .inline-form select {
+      max-width: 18rem; padding: 0 .5rem; border: 1px solid var(--border); border-radius: 6px;
+      background: var(--bg); color: var(--ink); font-size: .85rem; font-family: inherit;
+    }
+    /* Text actions (Sign out, Deactivate, Enable): links, not buttons. */
+    button.link {
+      height: auto; padding: 0; border: 0; background: none; color: var(--muted);
+      font-size: .875rem; font-weight: 400; line-height: inherit;
+    }
     button.link:hover { background: none; color: var(--ink); }
     .theme-toggle { display: inline-flex; align-items: center; gap: .3rem; font-size: .85rem; }
     .theme-float { position: absolute; top: .9rem; right: 1.25rem; }
@@ -169,7 +201,7 @@
       border: 1px solid var(--border); border-radius: 10px;
     }
     .filter-bar select, .filter-bar input[type=search] {
-      padding: .4rem .55rem; border: 1px solid var(--border); border-radius: 6px;
+      padding: 0 .55rem; border: 1px solid var(--border); border-radius: 6px;
       background: var(--bg); color: var(--ink); font-size: .85rem;
     }
     .filter-bar input[type=search] { flex: 1; min-width: 10rem; }
@@ -256,18 +288,24 @@
     /* ─── Admin: users ───────────────────────────────────────────────── */
     .admin-users td { vertical-align: middle; }
     .admin-users tr.inactive td { color: var(--muted); }
-    .admin-users button.link { font-size: .85rem; }
     .admin-users select, .add-user select, .add-user input, .pw-reset input {
-      padding: .35rem .5rem; border: 1px solid var(--border); border-radius: 6px;
+      padding: 0 .5rem; border: 1px solid var(--border); border-radius: 6px;
       background: var(--bg); color: var(--ink); font-size: .85rem; font-family: inherit;
     }
     .pw-reset { display: inline-block; margin-right: .8rem; font-size: .85rem; }
     .pw-reset summary { cursor: pointer; color: var(--accent); }
-    .pw-reset form { display: flex; gap: .4rem; margin-top: .4rem; }
+    .pw-reset form { display: flex; gap: .4rem; margin-top: .4rem; align-items: center; }
     .pw-reset input { width: 14rem; }
-    .pw-reset button, .add-user button { padding: .35rem .8rem; font-size: .85rem; }
     .add-user { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .6rem; align-items: end; }
     .add-user input, .add-user select { width: 100%; }
+    /* ─── Advisory source ───────────────────────────────────────────────── */
+    .source-field { display: inline-flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+    .source-how { font-size: .78rem; }
+    .source-change { font-size: .8rem; }
+    .source-change summary { cursor: pointer; color: var(--accent); }
+    .source-change[open] { flex-basis: 100%; }
+    .source-change .inline-form { margin-top: .35rem; }
+    .inline-error { margin: 0; padding: .2rem .5rem; font-size: .8rem; }
     .htmx-indicator { display: none; }
     .htmx-request .htmx-indicator { display: inline; }
     .htmx-request.htmx-indicator { display: inline; }

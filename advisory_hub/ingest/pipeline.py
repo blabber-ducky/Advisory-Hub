@@ -31,6 +31,9 @@ class IngestOutcome:
     advisory_id: str | None = None
     external_ref: str | None = None
     error: str | None = None
+    source_code: str | None = None
+    #: SourceMethod value — "NONE" means no source was detected.
+    source_method: str | None = None
 
 
 def ingest_file(
@@ -55,11 +58,20 @@ def ingest_file(
             result = ingest_parsed_advisory(db, parsed, blobs, actor=actor)
             advisory_id = str(result.advisory_id) if result.advisory_id else None
             ref = result.advisory.external_ref if result.advisory else None
+            source_code = result.advisory.source.short_code if result.advisory else None
+            method = result.advisory.source_method.value if result.advisory else None
             status = "DUPLICATE" if result.duplicate else "INGESTED"
     except Exception as exc:
         return IngestOutcome(path, "FAILED", error=f"PERSIST: {type(exc).__name__}: {exc}")
 
-    return IngestOutcome(path, status, advisory_id=advisory_id, external_ref=ref)
+    return IngestOutcome(
+        path,
+        status,
+        advisory_id=advisory_id,
+        external_ref=ref,
+        source_code=source_code,
+        source_method=method,
+    )
 
 
 def process_inbox(*, limit: int = 50, inbox: Inbox | None = None) -> list[IngestOutcome]:

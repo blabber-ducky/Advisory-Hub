@@ -20,6 +20,22 @@ SUBJECT = re.compile(
     re.IGNORECASE,
 )
 
+#: Reply/forward markers and the gateway's [EXTERNAL] tag, in any order and
+#: repeated — "FW: [EXTERNAL] Security Advisory …", "RE: FW: …". Stripped
+#: before SUBJECT is matched, so a forwarded advisory keeps its reference.
+SUBJECT_PREFIXES = re.compile(
+    r"^\s*(?:(?:re|fw|fwd|aw|wg|tr|rv)\s*:\s*|\[external\]\s*)+", re.IGNORECASE
+)
+
+#: Fallback when SUBJECT doesn't match: a regulator reference anywhere in the
+#: subject ("Urgent - DOH-2026550 patch now"). Uppercase prefix only, and
+#: never followed by another "-digits", so CVE-2026-1234 can't match.
+REFERENCE_ANYWHERE = re.compile(
+    r"(?<![A-Za-z0-9])(?P<prefix>[A-Z]{2,6})\s*-\s*(?P<number>\d{4,8})(?![\d-])"
+)
+#: Identifier schemes that look like a reference but are never a regulator's.
+NOT_A_REFERENCE = frozenset({"CVE", "CWE", "CAPEC", "GHSA", "CVSS", "KB", "MS"})
+
 # ─── Email body labelled fields ──────────────────────────────────────────────
 #: Presence across the corpus: Reference/Detected on/Type/Risk level/Action
 #: Required 135/135; Description 134; Affected Product 128.

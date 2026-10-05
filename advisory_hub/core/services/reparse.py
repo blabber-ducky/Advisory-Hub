@@ -2,7 +2,8 @@
 
 Parsers improve; analyst work must survive them. Re-parsing rewrites only
 derived fields and **never** touches ``status``, ``assignee``, comments,
-acknowledgement, or status history — see docs/ingestion.md §15.
+acknowledgement, or status history — see docs/ingestion.md §15. The source
+is re-resolved too, except one an analyst set (``SourceMethod.MANUAL``).
 """
 
 from __future__ import annotations
@@ -24,14 +25,18 @@ from ..models.advisory import (
     AdvisoryProduct,
     AdvisoryTtp,
     Blob,
+    Source,
 )
+from ..models.enums import FlagKind, SourceMethod
 from ..storage.blobs import BlobStore, FilesystemBlobStore
 from .audit import Actor, record
+from .sources import SourceResolution, resolve_source, unknown_sender_detail
 
 log = get_logger(__name__)
 
 #: Rewritten by a re-parse. Everything not listed here is analyst-owned.
 DERIVED_FIELDS = (
+    "external_ref",
     "type",
     "type_confidence",
     "source_type_raw",
@@ -132,7 +137,7 @@ def _reparse_one(
         raise ValueError("raw message blob row is missing")
 
     raw = blobs.get_bytes(blob.sha256)
-    message = _rebuild_message(raw, blob.original_filename or "message.msg")
+    message = _rebuild_message(raw, blob.original_filename or "")
     parsed = parse_advisory(message)
 
     diffs: list[str] = []
@@ -143,6 +148,20 @@ def _reparse_one(
             after = parsed.parser_version
         if _differs(before, after):
             diffs.append(f"{name}: {_short(before)} → {_short(after)}")
+
+    # Source: re-resolved from the sender and the (possibly new) reference,
+    # unless an analyst set it — MANUAL is never overridden.
+    resolution = None
+    if advisory.source_method is not SourceMethod.MANUAL:
+        resolution = resolve_source(db, message.sender_email, parsed.external_ref)
+        before_source = db.get(Source, advisory.source_id)
+        moved = resolution.source.id != advisory.source_id
+        if moved or resolution.method != advisory.source_method:
+            diffs.append(
+                f"source: {before_source.short_code if before_source else '?'}"
+                f" ({advisory.source_method.value.lower()}) → "
+                f"{resolution.source.short_code} ({resolution.method.value.lower()})"
+            )
 
     before_cves = {c.cve_id for c in advisory.cves}
     after_cves = set(parsed.cves)
@@ -165,21 +184,68 @@ def _reparse_one(
         setattr(advisory, name, getattr(parsed, name, None))
     advisory.parser_version = parsed.parser_version
 
-    # Replace derived children; analyst-owned rows are untouched.
-    for model in (AdvisoryCve, AdvisoryIoc, AdvisoryProduct, AdvisoryTtp, AdvisoryFlag):
+    if resolution is not None:
+        advisory.source_id = resolution.source.id
+        advisory.source_method = resolution.method
+
+    # Replace derived children; analyst-owned rows are untouched. Flags the
+    # parser didn't produce are kept: POSSIBLE_REISSUE comes from ingest-time
+    # linking (its relation rows survive), and UNKNOWN_SENDER is reconciled
+    # below so an analyst's resolution of it isn't lost.
+    for model in (AdvisoryCve, AdvisoryIoc, AdvisoryProduct, AdvisoryTtp):
         db.execute(delete(model).where(model.advisory_id == advisory.id))
+    db.execute(
+        delete(AdvisoryFlag).where(
+            AdvisoryFlag.advisory_id == advisory.id,
+            AdvisoryFlag.kind.not_in(_KEPT_FLAGS),
+        )
+    )
     db.flush()
 
     from .ingestion import _write_children  # local import avoids a cycle
 
     _write_children(db, advisory, parsed, blobs)
     for kind, detail in parsed.flags:
-        db.add(AdvisoryFlag(advisory_id=advisory.id, kind=kind, detail=detail))
+        if kind not in _KEPT_FLAGS:
+            db.add(AdvisoryFlag(advisory_id=advisory.id, kind=kind, detail=detail))
+    if resolution is not None:
+        _reconcile_unknown_sender(db, advisory, message, resolution)
 
     advisory.search_vector = func.to_tsvector(
         "english", f"{advisory.title} {advisory.description or ''} {advisory.body_text or ''}"
     )
     return True
+
+
+#: Flags a re-parse doesn't recreate from the parser's output.
+_KEPT_FLAGS = (FlagKind.POSSIBLE_REISSUE, FlagKind.UNKNOWN_SENDER)
+
+
+def _reconcile_unknown_sender(
+    db: DbSession, advisory: Advisory, message: ParsedMessage, resolution: SourceResolution
+) -> None:
+    """Keep exactly one UNKNOWN_SENDER flag while the sender is unrecognised
+    (the existing row, with any resolution, if there is one); none once it is."""
+    existing = db.scalars(
+        select(AdvisoryFlag).where(
+            AdvisoryFlag.advisory_id == advisory.id,
+            AdvisoryFlag.kind == FlagKind.UNKNOWN_SENDER,
+        )
+    ).all()
+    if resolution.sender_matched:
+        for flag in existing:
+            db.delete(flag)
+        return
+    detail = unknown_sender_detail(message, resolution)
+    if existing:
+        existing[0].detail = detail
+        for extra in existing[1:]:
+            db.delete(extra)
+    else:
+        db.add(AdvisoryFlag(advisory_id=advisory.id, kind=FlagKind.UNKNOWN_SENDER, detail=detail))
+
+
+_OLE2_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 
 
 def _rebuild_message(raw: bytes, filename: str) -> ParsedMessage:
@@ -189,7 +255,10 @@ def _rebuild_message(raw: bytes, filename: str) -> ParsedMessage:
 
     from ...ingest.message import parse_message
 
-    suffix = Path(filename).suffix.lower() or ".msg"
+    # The raw-message blob is stored without a filename, so its format comes
+    # from the bytes: Outlook .msg is an OLE2 compound file; anything else is
+    # RFC 822 (.eml) — uploads and mail-rule drops can be either.
+    suffix = Path(filename).suffix.lower() or (".msg" if raw.startswith(_OLE2_MAGIC) else ".eml")
     with tempfile.TemporaryDirectory(prefix="advhub-reparse-") as tmp:
         path = Path(tmp) / f"message{suffix}"
         path.write_bytes(raw)

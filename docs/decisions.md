@@ -1284,6 +1284,33 @@ keep the same `user_account` rows.
 
 ---
 
+## D-047 — Source from the reference number when the sender is unknown; analysts can set it; unknown senders stay flagged
+
+**Date:** 2026-10-05 · **Status:** Accepted
+
+**Why**: asked that any advisory titled `DOH-xxxxx` be attributed to the
+Department of Health, with a way to set the source when it isn't detected —
+on upload and later in the detail view. Before this, the source came only
+from the sender, so a forwarded or re-sent advisory landed under "Unknown
+sender"; and a forwarded subject (`FW: …`) didn't even yield its reference.
+
+**Decision**:
+
+| Rule | Because |
+|---|---|
+| Sender first, then the reference prefix (`DOH-…` → the source whose `short_code` is `DOH`), then UNKNOWN | The sender is the stronger evidence; the reference is generic, so a new regulator works by giving its source a matching short code — nothing DOH-specific in code |
+| `UNKNOWN_SENDER` is still raised when the reference decided the source | An outside address sending a DOH-numbered email is what spoofing looks like. Filed under DOH so it's tracked; flagged so someone checks it |
+| How the source was decided is stored (`advisory.source_method`) and shown | CLAUDE.md §2.2 — an inference is evidence, displayed as such |
+| An analyst can set the source (ANALYST+); it becomes `MANUAL`, is audited, resolves the open `UNKNOWN_SENDER` flag, and a re-parse never overrides it | Choosing the source is the analyst's verdict on that sender; analyst work survives re-parsing |
+| UNKNOWN can't be chosen by hand | It means "not decided" — leaving an advisory there is the absence of a choice |
+| Subject parsing strips `FW:`/`RE:`/… and `[EXTERNAL]`, and finds a reference anywhere, never `CVE-…` | A forwarded advisory is the main way the sender goes unrecognised |
+
+**Also fixed** (found while making re-parse source-aware): re-parse deleted
+ingest-time flags (`UNKNOWN_SENDER`, `POSSIBLE_REISSUE`), and couldn't
+rebuild `.eml` messages (it assumed `.msg`).
+
+---
+
 ## Open decisions
 
 Tracked in `CLAUDE.md` §5 until resolved. When one is answered, record it here as

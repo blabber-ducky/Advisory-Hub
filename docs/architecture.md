@@ -126,7 +126,21 @@ swaps. No Node build step, one deployable, one language.
   The ingest audit entry names the uploader, not `system`. A file the
   worker's poller claims first is reported "Queued for the worker". The
   result (per file: Ingested / Already ingested / Failed + reason, linked
-  to its advisory) is swapped in above the dashboard.
+  to its advisory, and its source) is swapped in above the dashboard. A
+  file whose source wasn't detected gets a source picker right there.
+- **Advisory source** (detail view → Details → Source): the source, how it
+  was decided (matched sender / from reference DOH-… / set manually / Not
+  detected), and for ANALYST+ a **Change** picker —
+  `POST /advisories/{id}/source` → `advisories.change_source()`, audited
+  `advisory.source_changed`, marks it `MANUAL`, resolves an open
+  `UNKNOWN_SENDER` flag. Rules: docs/ingestion.md §6 "Source", D-047.
+- **Buttons and controls**: one size everywhere (`--control-h`, 2.25rem):
+  every `<button>`, the "Upload email" label-button and the native file
+  picker share height, padding, font and radius. Primary (filled) is the
+  default; `.secondary` (outlined, same size) for an action beside a
+  primary one — Refresh, Scan inbox now, Test connection, Deactivate.
+  `button.link` is for text actions (Sign out, Deactivate a user).
+  Inputs/selects that sit beside buttons use the same height.
 - **Import manual tracker** (`/tracker-import`, ANALYST+, linked from the
   tracker page): upload the team's spreadsheet tracker (`.xlsx`) or the CSV
   converted from it, preview, then apply — statuses and comments brought

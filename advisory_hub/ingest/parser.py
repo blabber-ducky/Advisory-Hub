@@ -52,7 +52,9 @@ from .version_range import parse_version_range
 #: `reparse` can target older versions. See docs/ingestion.md §15.
 #: 2: structured `parsed_range` extraction from version_expression/
 #: fixed_version — see ingest/version_range.py and D-032.
-PARSER_VERSION = "2"
+#: 3: forwarded subjects ("FW: [EXTERNAL] Security Advisory …") keep their
+#: reference and title; a reference anywhere in the subject is found — D-047.
+PARSER_VERSION = "3"
 
 
 @dataclass(slots=True)

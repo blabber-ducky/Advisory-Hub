@@ -62,17 +62,11 @@ class ParsedMessage:
     # ─── Derived from the subject ────────────────────────────────────────────
     @property
     def external_ref(self) -> str | None:
-        m = patterns.SUBJECT.match(patterns.normalise_whitespace(self.subject or ""))
-        return f"{m.group('prefix').upper()}-{m.group('number')}" if m else None
+        return subject_parts(self.subject)[0]
 
     @property
     def title(self) -> str:
-        m = patterns.SUBJECT.match(patterns.normalise_whitespace(self.subject or ""))
-        if m and m.group("title").strip():
-            return re.sub(r"\s+", " ", m.group("title")).strip()
-        return (
-            re.sub(r"^\[EXTERNAL\]\s*", "", self.subject or "", flags=re.I).strip() or "(untitled)"
-        )
+        return subject_parts(self.subject)[1]
 
     @property
     def pdfs(self) -> list[Attachment]:
@@ -81,6 +75,31 @@ class ParsedMessage:
     @property
     def sidecars(self) -> list[Attachment]:
         return [a for a in self.attachments if a.is_sidecar]
+
+
+def subject_parts(subject: str | None) -> tuple[str | None, str]:
+    """``(external_ref, title)`` from a subject line.
+
+    Reply/forward markers and [EXTERNAL] are stripped first. The strict
+    corpus pattern (``patterns.SUBJECT``) wins; failing that, a reference
+    anywhere in the subject is still picked up, and the title is the
+    stripped subject.
+    """
+    cleaned = patterns.SUBJECT_PREFIXES.sub("", patterns.normalise_whitespace(subject or ""))
+    m = patterns.SUBJECT.match(cleaned)
+    if m:
+        title = re.sub(r"\s+", " ", m.group("title")).strip()
+        ref = f"{m.group('prefix').upper()}-{m.group('number')}"
+        return ref, title or cleaned.strip() or "(untitled)"
+    loose = next(
+        (
+            f"{found.group('prefix')}-{found.group('number')}"
+            for found in patterns.REFERENCE_ANYWHERE.finditer(cleaned)
+            if found.group("prefix") not in patterns.NOT_A_REFERENCE
+        ),
+        None,
+    )
+    return loose, cleaned.strip() or "(untitled)"
 
 
 class MessageParseError(Exception):

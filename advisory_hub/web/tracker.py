@@ -27,6 +27,7 @@ from ..core.services import advisories as svc
 from ..core.services import inventory as inventory_svc
 from ..core.services import iocs as iocs_svc
 from ..core.services import scan as scan_svc
+from ..core.services import sources as sources_svc
 from ..core.services import vt_lookup as vt_svc
 from ..core.services.auth import PermissionDeniedError, Principal
 from ..core.storage.blobs import FilesystemBlobStore
@@ -123,6 +124,7 @@ def scan_inbox(
 async def upload_messages(
     request: Request,
     files: list[UploadFile] = File(default=[]),
+    db: DbSession = Depends(db_session),
     principal: Principal = Depends(_require_web_principal),
 ) -> HTMLResponse:
     """Ingest .eml/.msg files uploaded from the tracker page — through the
@@ -147,7 +149,8 @@ async def upload_messages(
         {"name": original, "outcome": outcome}
         for (original, _), outcome in zip(uploads, outcomes, strict=True)
     ]
-    return templates.TemplateResponse(request, "_upload_result.html", {"rows": rows})
+    context = {"rows": rows, "sources": sources_svc.assignable_sources(db)}
+    return templates.TemplateResponse(request, "_upload_result.html", context)
 
 
 def _inbox_scan_result(request: Request) -> dict[str, int] | None:
@@ -193,6 +196,9 @@ def advisory_detail(
         # Same service call, same chips as the tracker row this page was
         # reached from — so the summary can't drift between the two views.
         "ioc_breakdown": svc.ioc_breakdowns_for(db, [advisory_id]).get(advisory_id),
+        "sources": sources_svc.assignable_sources(db),
+        "can_edit_source": principal.user is not None
+        and principal.user.role.satisfies(Role.ANALYST),
     }
     context.update(_scan_panel_context(db, advisory_id))
     return templates.TemplateResponse(request, "advisory_detail_page.html", context)
@@ -315,6 +321,46 @@ def _status_form_error(
         "ack_channel": ack_channel,
     }
     return templates.TemplateResponse(request, "_status_form.html", context)
+
+
+@router.post("/advisories/{advisory_id}/source", response_class=HTMLResponse)
+def change_advisory_source(
+    advisory_id: uuid.UUID,
+    request: Request,
+    source_id: uuid.UUID = Form(...),
+    compact: bool = Form(False),
+    db: DbSession = Depends(db_session),
+    principal: Principal = Depends(_require_web_principal),
+) -> HTMLResponse:
+    """Set the source by hand — from the detail view, or an upload result
+    whose source wasn't detected (``compact``). Rules: ``svc.change_source``."""
+    try:
+        principal.require_role(Role.ANALYST)
+    except PermissionDeniedError:
+        raise HTTPException(status_code=403, detail="Insufficient role") from None
+    error = None
+    try:
+        svc.change_source(
+            db,
+            advisory_id,
+            source_id=source_id,
+            actor=principal.to_actor(request.client.host if request.client else None),
+        )
+        db.commit()
+    except svc.AdvisoryNotFoundError:
+        raise HTTPException(status_code=404, detail="Advisory not found") from None
+    except svc.InvalidSourceError:
+        db.rollback()
+        error = "That source can't be chosen — pick an active source from the list."
+    advisory = svc.get_advisory(db, advisory_id)
+    context = {
+        "advisory": advisory,
+        "sources": sources_svc.assignable_sources(db),
+        "can_edit_source": True,
+        "compact": compact,
+        "source_error": error,
+    }
+    return templates.TemplateResponse(request, "_source_field.html", context)
 
 
 @router.get("/advisories/{advisory_id}/scan-panel", response_class=HTMLResponse)

@@ -133,7 +133,7 @@
       <div class="detail-section">
         <h3>Attachments</h3>
         <div class="attachment-list">
-          <a href="/advisories/{{ advisory.id }}/attachments/raw">Original email (.msg)</a>
+          <a href="/advisories/{{ advisory.id }}/attachments/raw">Original email</a>
           {% for att in advisory.attachments %}
           <a href="/advisories/{{ advisory.id }}/attachments/{{ att.id }}">
             {{ att.filename }}
@@ -153,7 +153,7 @@
       <div class="detail-section">
         <h3>Details</h3>
         <dl class="kv">
-          <dt>Source</dt><dd>{{ advisory.source.name }}</dd>
+          <dt>Source</dt><dd>{% include "_source_field.html" %}</dd>
           <dt>Reference</dt><dd>{{ advisory.external_ref or '—' }}</dd>
           <dt>Type</dt><dd>{{ m.type_badge(advisory.type.value) }} <span style="color:var(--muted);font-size:.78rem">({{ (advisory.type_confidence * 100) | round | int if advisory.type_confidence is not none else '?' }}% confidence)</span></dd>
           <dt>Regulator's own type</dt><dd style="color:var(--muted)">{{ advisory.source_type_raw or '—' }}</dd>

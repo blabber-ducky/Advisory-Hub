@@ -32,8 +32,10 @@ from ..models.enums import (
     AckChannel,
     AdvisoryStatus,
     AdvisoryType,
+    FlagKind,
     IocType,
     Severity,
+    SourceMethod,
 )
 from .audit import Actor, record
 
@@ -760,3 +762,57 @@ __all__ = [
     "sources_for_filter",
     "update_advisory",
 ]
+
+
+# ─── Source (manual override) ────────────────────────────────────────────────
+
+
+class InvalidSourceError(Exception):
+    """The chosen source doesn't exist, is inactive, or is the UNKNOWN bucket."""
+
+
+def change_source(
+    db: DbSession, advisory_id: uuid.UUID, *, source_id: uuid.UUID, actor: Actor
+) -> Advisory:
+    """Set an advisory's source by hand — for one the sender and reference
+    couldn't identify, or got wrong.
+
+    Marks it MANUAL, so a re-parse never overrides it, and resolves an open
+    UNKNOWN_SENDER flag in the actor's name: choosing the source is the
+    analyst's verdict on that sender. Choosing the source it already has
+    still records the confirmation (and makes it MANUAL).
+    """
+    from .sources import UNKNOWN_SOURCE_CODE
+
+    advisory = db.get(Advisory, advisory_id)
+    if advisory is None:
+        raise AdvisoryNotFoundError(advisory_id)
+    source = db.get(Source, source_id)
+    if source is None or not source.is_active or source.short_code == UNKNOWN_SOURCE_CODE:
+        raise InvalidSourceError(source_id)
+    if advisory.source_id == source.id and advisory.source_method is SourceMethod.MANUAL:
+        return advisory
+
+    previous = db.get(Source, advisory.source_id)
+    previous_method = advisory.source_method
+    advisory.source_id = source.id
+    advisory.source_method = SourceMethod.MANUAL
+    now = utcnow()
+    for flag in advisory.flags:
+        if flag.kind is FlagKind.UNKNOWN_SENDER and flag.resolved_at is None:
+            flag.resolved_at = now
+            flag.resolved_by_id = actor.user_id
+    record(
+        db,
+        actor=actor,
+        action="advisory.source_changed",
+        entity_type="advisory",
+        entity_id=advisory.id,
+        detail={
+            "external_ref": advisory.external_ref,
+            "from": previous.short_code if previous else None,
+            "from_method": previous_method.value,
+            "to": source.short_code,
+        },
+    )
+    return advisory

@@ -131,6 +131,37 @@ data/                        # all persistent data, ./data/<volume> (git- and do
 
 Newest first. Update this when work lands.
 
+### 2026-10-05 — Source from the DOH reference; set source by hand; uniform buttons
+- **On request**: DOH-xxxxx advisories attributed to the Department of
+  Health; source settable when not detected, on upload and in the detail
+  view; all buttons uniform and size-matched. D-047.
+- **Detection**: `resolve_source()` now sender → reference prefix
+  (`short_code`) → UNKNOWN, returning a `SourceResolution`. New column
+  `advisory.source_method` (SENDER/REFERENCE/MANUAL/NONE; migration
+  `7b3e2f1a9c4d`, backfilled, `DROP TYPE` in downgrade). Unknown senders stay
+  flagged even when the reference decides the source. Parser v3:
+  `subject_parts()` strips FW:/RE:/[EXTERNAL] and finds a reference anywhere
+  (never CVE-…); 182/182 unique corpus subjects parse identically to v2.
+- **Manual**: `advisories.change_source()` (ANALYST+, audited, → MANUAL,
+  resolves the UNKNOWN_SENDER flag); `POST /advisories/{id}/source`;
+  `_source_field.html` in the detail view (Change picker) and a picker in
+  upload results for undetected files.
+- **Re-parse**: re-derives `external_ref` and re-resolves source (never
+  MANUAL). Two pre-existing bugs fixed: it deleted UNKNOWN_SENDER /
+  POSSIBLE_REISSUE flags, and couldn't rebuild `.eml` (assumed `.msg`).
+- **Buttons**: one rule in base.html (`--control-h` 2.25rem) for every
+  button, the upload label-button and the native file picker; `.secondary`
+  (same size, outlined) beside a primary; inline-style buttons removed;
+  text inputs/selects beside buttons share the height (inventory's Name
+  input was unstyled). Detail view's "Original email (.msg)" → "Original
+  email" (uploads can be .eml).
+- **Verified**: 753 tests (21 new in `tests/test_source_detection.py`;
+  re-parse tests fail on the old code); ruff/mypy clean; migration up/down/up
+  with rows. Real HTTP run: 2 corpus .msg → DOH (sender), forwarded .eml →
+  DOH (reference, flagged), unrelated .eml → "Source not detected" picker →
+  saved → MANUAL, flag resolved, audited. Screenshots of every page in light
+  and dark checked for button/control alignment.
+
 ### 2026-10-05 — User administration on `/admin`
 - **On request** (user administration for admins, with role changes from
   that view). D-046; architecture.md §3.3 and §6.

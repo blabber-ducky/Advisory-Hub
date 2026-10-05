@@ -38,7 +38,7 @@ from ..models.enums import (
 )
 from ..storage.blobs import BlobStore
 from .audit import Actor, record
-from .sources import resolve_source
+from .sources import resolve_source, unknown_sender_detail
 
 #: Window for spotting a re-issue under a new reference number (D-020).
 REISSUE_WINDOW = timedelta(days=14)
@@ -73,14 +73,15 @@ def ingest_parsed_advisory(
             advisory=existing, created=False, duplicate=True, reason="DUPLICATE_HASH"
         )
 
-    source, matched = resolve_source(db, message.sender_email)
+    resolution = resolve_source(db, message.sender_email, parsed.external_ref)
 
     raw_blob = _store_blob(
         db, blobs, message.raw_bytes, filename=None, content_type="application/vnd.ms-outlook"
     )
 
     advisory = Advisory(
-        source_id=source.id,
+        source_id=resolution.source.id,
+        source_method=resolution.method,
         external_ref=parsed.external_ref,
         type=parsed.type,
         type_confidence=parsed.type_confidence,
@@ -110,8 +111,8 @@ def ingest_parsed_advisory(
     _write_children(db, advisory, parsed, blobs)
 
     flags = list(parsed.flags)
-    if not matched:
-        flags.append((FlagKind.UNKNOWN_SENDER, {"sender": message.sender or "(none)"}))
+    if not resolution.sender_matched:
+        flags.append((FlagKind.UNKNOWN_SENDER, unknown_sender_detail(message, resolution)))
     for kind, detail in flags:
         db.add(AdvisoryFlag(advisory_id=advisory.id, kind=kind, detail=detail))
 

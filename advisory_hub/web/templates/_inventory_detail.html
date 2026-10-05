@@ -37,15 +37,16 @@
       <div class="detail-section">
         <h3>Actions</h3>
         <div id="test-result-{{ source.id }}"></div>
+        <div class="button-row">
         <button type="button"
                 hx-post="/inventory/sources/{{ source.id }}/test"
                 hx-target="#test-result-{{ source.id }}"
                 hx-swap="innerHTML"
-                style="margin-top:.4rem">Test connection</button>
+                class="secondary">Test connection</button>
         <button type="button"
                 hx-post="/inventory/sources/{{ source.id }}/toggle"
                 hx-target="body" hx-swap="none"
-                style="margin-top:.4rem;margin-left:.5rem;background:var(--muted)">
+                class="secondary">
           {{ 'Deactivate' if source.is_active else 'Activate' }}
         </button>
         {% if source.kind.value.startswith('API_') %}
@@ -53,10 +54,10 @@
                 hx-post="/inventory/sources/{{ source.id }}/sync"
                 hx-target="#test-result-{{ source.id }}"
                 hx-swap="innerHTML"
-                hx-indicator="#sync-indicator-{{ source.id }}"
-                style="margin-top:.4rem;margin-left:.5rem">Sync now</button>
-        <span id="sync-indicator-{{ source.id }}" class="htmx-indicator muted" style="margin-left:.4rem">Syncing&hellip;</span>
+                hx-indicator="#sync-indicator-{{ source.id }}">Sync now</button>
+        <span id="sync-indicator-{{ source.id }}" class="htmx-indicator muted">Syncing&hellip;</span>
         {% endif %}
+        </div>
       </div>
 
       {% if source.kind.value.startswith('CSV_') %}

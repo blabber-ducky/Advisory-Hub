@@ -156,6 +156,40 @@ observed: `DOH- 2026550` (space after dash), `DOH-2026512-` (no space before
 title), `DOH-2026607 Multiple…` (**no separator at all**), and `–` en-dash inside
 titles. The `_` seen in filenames is Outlook sanitising `::`.
 
+**Forwarded and odd subjects (parser v3, D-047).** `ingest.message.subject_parts()`
+first strips reply/forward markers and `[EXTERNAL]`, in any order and repeated
+(`FW:`, `Fwd:`, `RE:`, `AW:`, `WG:`, `TR:`, `RV:`), then applies the pattern
+above. If that still doesn't match, a reference **anywhere** in the subject is
+used (`patterns.REFERENCE_ANYWHERE`: an uppercase 2–6 letter prefix, dash,
+4–8 digits, not followed by another `-digits`) and the title is the cleaned
+subject. `CVE`, `CWE`, `CAPEC`, `GHSA`, `CVSS`, `KB`, `MS` are never taken as a
+reference.
+
+| Subject | Reference | Title |
+|---|---|---|
+| `FW: [EXTERNAL] Security Advisory :: DOH-2026551 - SharePoint RCE` | `DOH-2026551` | `SharePoint RCE` |
+| `FW: Urgent - DOH-2026700 patch today` | `DOH-2026700` | `Urgent - DOH-2026700 patch today` |
+| `Patch CVE-2026-12345 now` | — | `Patch CVE-2026-12345 now` |
+
+Verified against the corpus: all 182 unique real subjects give the identical
+reference and title as parser v2.
+
+### Source
+
+Decided in `core.services.sources.resolve_source()`, most trustworthy first,
+and stored with its method (`advisory.source_method`):
+
+| Order | Evidence | Method | `UNKNOWN_SENDER` flag |
+|---|---|---|---|
+| 1 | Sender address matches a source's `sender_patterns` (address > domain > subdomain) | `SENDER` | no |
+| 2 | Sender unrecognised, reference prefix matches an active source's `short_code` — `DOH-2026550` → DOH | `REFERENCE` | **yes**, detail adds `source_from_reference` |
+| 3 | Neither | `NONE` (source `UNKNOWN`) | yes |
+| — | An analyst sets it (detail view, or the upload result) | `MANUAL` | the open flag is resolved by them |
+
+An unrecognised sender stays flagged even when the reference files the
+advisory: a DOH-numbered email from an outside address is what spoofing
+looks like, so it should be looked at, not trusted.
+
 ### Field value vocabularies
 
 `Risk level` — `Critical` 79 · `High` 39 · `Medium` 16. **`Low` never observed**;
@@ -517,3 +551,18 @@ docker compose exec app python -m advisory_hub.cli reparse \
 
 Because this corpus is already archived, every parser improvement can be
 regression-tested against all 135 real advisories before deployment.
+
+Since parser v3 a re-parse also:
+
+- re-derives `external_ref` (a forwarded subject now yields one) and
+  re-resolves the **source** — except `MANUAL`, which is the analyst's and
+  is never changed;
+- keeps `POSSIBLE_REISSUE` and `UNKNOWN_SENDER` flags instead of deleting
+  them (both come from ingest, not the parser — earlier versions silently
+  dropped them); `UNKNOWN_SENDER` is kept, with any resolution, while the
+  sender is unrecognised and removed once it matches;
+- rebuilds `.eml` messages correctly (format detected from the bytes — the
+  raw blob has no filename; earlier versions assumed `.msg`).
+
+To refile advisories that landed under `UNKNOWN` before reference detection:
+`reparse --parser-version-below 3`.

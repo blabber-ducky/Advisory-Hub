@@ -36,6 +36,7 @@ The core record.
 | Column | Type | Notes |
 |---|---|---|
 | `source_id` | fk → source | |
+| `source_method` | enum | How the source was decided: `SENDER` (sender matched the source's patterns), `REFERENCE` (sender unrecognised; reference prefix `DOH-…` matched the source's `short_code`), `MANUAL` (set by an analyst — a re-parse never changes it), `NONE` (nothing matched → `UNKNOWN` source). Backfilled `NONE` for advisories under `UNKNOWN`, `SENDER` otherwise. D-047 |
 | `external_ref` | text nullable | Regulator's own advisory number, if parseable |
 | `type` | enum | `CVE_ADVISORY`, `SECURITY_BULLETIN`, `THREAT_LANDSCAPE`, `OTHER` |
 | `type_confidence` | numeric(3,2) | Classifier confidence 0.00–1.00 |

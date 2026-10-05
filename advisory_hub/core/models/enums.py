@@ -90,6 +90,15 @@ class FlagKind(StrEnum):
     PDF_PARSE_FAILED = "PDF_PARSE_FAILED"
 
 
+class SourceMethod(StrEnum):
+    """How an advisory's source was decided — evidence, shown as such."""
+
+    SENDER = "SENDER"  # sender address matched a source's sender patterns
+    REFERENCE = "REFERENCE"  # sender unrecognised; reference prefix (DOH-…) matched a short code
+    MANUAL = "MANUAL"  # set by an analyst; never overwritten by a re-parse
+    NONE = "NONE"  # nothing matched — filed under the UNKNOWN source
+
+
 class RelationKind(StrEnum):
     POSSIBLE_REISSUE = "POSSIBLE_REISSUE"
     SUPERSEDES = "SUPERSEDES"
