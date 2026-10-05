@@ -253,6 +253,21 @@
     }
     .status-form textarea { resize: vertical; }
     .status-form button { align-self: flex-start; }
+    /* ─── Admin: users ───────────────────────────────────────────────── */
+    .admin-users td { vertical-align: middle; }
+    .admin-users tr.inactive td { color: var(--muted); }
+    .admin-users button.link { font-size: .85rem; }
+    .admin-users select, .add-user select, .add-user input, .pw-reset input {
+      padding: .35rem .5rem; border: 1px solid var(--border); border-radius: 6px;
+      background: var(--bg); color: var(--ink); font-size: .85rem; font-family: inherit;
+    }
+    .pw-reset { display: inline-block; margin-right: .8rem; font-size: .85rem; }
+    .pw-reset summary { cursor: pointer; color: var(--accent); }
+    .pw-reset form { display: flex; gap: .4rem; margin-top: .4rem; }
+    .pw-reset input { width: 14rem; }
+    .pw-reset button, .add-user button { padding: .35rem .8rem; font-size: .85rem; }
+    .add-user { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .6rem; align-items: end; }
+    .add-user input, .add-user select { width: 100%; }
     .htmx-indicator { display: none; }
     .htmx-request .htmx-indicator { display: inline; }
     .htmx-request.htmx-indicator { display: inline; }

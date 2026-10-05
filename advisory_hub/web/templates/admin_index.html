@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 style="font-size:1.3rem;margin:0 0 .3rem">Admin</h1>
-<p style="color:var(--muted);font-size:.85rem;margin:0 0 1.5rem">
+<h1 style="font-size:1.3rem;margin:0 0 1rem">Admin</h1>
+
+{% include "_admin_users.html" %}
+
+<h2 style="font-size:1.05rem;margin:0 0 .3rem">Integrations</h2>
+<p style="color:var(--muted);font-size:.85rem;margin:0 0 1.2rem">
   Global API integrations. Keys set here take priority over the equivalent
   environment variable and apply immediately — no restart needed.
 </p>

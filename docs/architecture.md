@@ -146,8 +146,12 @@ swaps. No Node build step, one deployable, one language.
   table (bulk VT results land asynchronously), and a CSV export
   (`/iocs/export`, honours the tab's current filters) that includes each
   indicator's cached VirusTotal result alongside its defanged value.
-- **Admin** (`/admin`, ADMIN role only): per-integration enable toggle and
-  write-only key rotation for NVD and VirusTotal.
+- **Admin** (`/admin`, ADMIN role only): **Users** — list every account
+  (role, active/deactivated, last sign-in), add a user with an initial
+  password, change a role inline, deactivate/reactivate, reset a password —
+  all rules in `core.services.users`, see §6 and D-046. Below it,
+  per-integration enable toggle and write-only key rotation for NVD and
+  VirusTotal.
 
 #### 3.3.1 Sorting the tracker by IOCs
 
@@ -485,6 +489,21 @@ Entra ID OIDC drops in later without touching call sites.
 | Viewer | Read advisories, comments, scan results |
 | Analyst | Viewer + change status, comment, run scans, upload CSV inventory |
 | Admin | Analyst + manage users, sources, inventory integrations, API tokens |
+
+**User administration (2026-10-05)** — `/admin` → Users, backed by
+`core.services.users` (every function takes the acting `Principal` and
+requires ADMIN itself):
+
+| Action | Rule | Audit action |
+|---|---|---|
+| Add user | Email unique (case-insensitive), password ≥ 12 chars — same as `create-admin` | `user.created` |
+| Change role | Not your own; never demotes the last active admin. Applies on the user's next request — no sign-out needed | `user.role_changed` (`from`/`to`) |
+| Deactivate | Not yourself; never the last active admin. Ends all their sessions; sign-in refused | `user.deactivated` |
+| Reactivate | — | `user.activated` |
+| Reset password | ≥ 12 chars. Ends all their sessions (except the admin's own current one when resetting their own) | `user.password_reset` |
+
+There is no delete: audit entries and comments reference the account, so it
+is deactivated instead (D-046).
 
 API tokens are scoped (`advisories:read`, `advisories:write`, `inventory:read`,
 `scan:run`, `stats:read`), hashed at rest (only the prefix is stored in clear for

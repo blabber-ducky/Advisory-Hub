@@ -1259,6 +1259,31 @@ mismatch, passphrase, expiry, half-present, launcher options).
 
 ---
 
+## D-046 — User administration in the web UI: deactivate, never delete; the last admin is protected
+
+**Date:** 2026-10-05 · **Status:** Accepted
+
+**Why**: accounts could only be created with the `create-admin` CLI (always
+ADMIN), and roles changed only in the database. Asked: user administration
+for admins, with roles editable from that view.
+
+**Decision**: `/admin` → Users (add, change role, deactivate/reactivate,
+reset password), all rules in `core.services.users`, each change audited.
+
+| Rule | Because |
+|---|---|
+| Deactivate instead of delete | Audit log, comments and status history reference the user; deleting would orphan (`SET NULL`) who did what. Deactivation keeps the trail and is reversible |
+| An admin can't change their own role or deactivate themselves | One misclick shouldn't lock you out; another admin does it |
+| The last active admin can't be demoted or deactivated (checked under a row lock on the active admins) | Otherwise the instance has no one who can manage it, and recovery needs shell access. The lock stops two admins demoting each other at once |
+| Role changes don't end sessions; deactivation and password resets do | The role is re-read from the database on every request, so a change applies immediately; a deactivated user or a reset password must not leave a live session behind |
+| Passwords ≥ 12 characters | Same as `create-admin` |
+
+**Not done**: self-service password change, forcing a password change at
+next sign-in, invitations by email. Users who will move to Entra ID (D-003)
+keep the same `user_account` rows.
+
+---
+
 ## Open decisions
 
 Tracked in `CLAUDE.md` §5 until resolved. When one is answered, record it here as

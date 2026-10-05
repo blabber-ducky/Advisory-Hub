@@ -1,0 +1,79 @@
+{# Users section of /admin. Every action re-renders this partial in place. #}
+<section id="admin-users" class="card" style="margin-bottom:1.5rem">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <h2 style="font-size:1.05rem;margin:0">Users</h2>
+    <span class="muted" style="font-size:.82rem">{{ users | selectattr('is_active') | list | length }} active · {{ users | length }} total</span>
+  </div>
+  <p class="muted" style="font-size:.82rem;margin:.3rem 0 .9rem">
+    Viewer: read only. Analyst: also change statuses, comment, import and upload.
+    Admin: also manage users and integrations. Role changes apply on the user's next click.
+  </p>
+
+  {% if users_error %}<p class="error" role="alert">{{ users_error }}</p>{% endif %}
+  {% if users_notice %}<div class="notice" role="status" style="margin-top:0">{{ users_notice }}</div>{% endif %}
+
+  <table class="product-table admin-users">
+    <thead>
+      <tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last sign-in</th><th></th></tr>
+    </thead>
+    <tbody>
+    {% for user in users %}
+    {% set is_self = principal.user and principal.user.id == user.id %}
+    <tr{% if not user.is_active %} class="inactive"{% endif %}>
+      <td>{{ user.display_name }}{% if is_self %} <span class="muted">(you)</span>{% endif %}</td>
+      <td>{{ user.email }}</td>
+      <td>
+        {% if is_self %}
+          {{ user.role.value | title }}
+        {% else %}
+        <form hx-post="/admin/users/{{ user.id }}/role" hx-trigger="change" hx-target="#admin-users" hx-swap="outerHTML" style="margin:0">
+          <select name="role" aria-label="Role for {{ user.display_name }}">
+            {% for r in roles %}
+            <option value="{{ r.value }}" {{ 'selected' if r == user.role else '' }}>{{ r.value | title }}</option>
+            {% endfor %}
+          </select>
+        </form>
+        {% endif %}
+      </td>
+      <td>
+        {% if user.is_active %}<span class="badge badge-good">Active</span>
+        {% else %}<span class="badge badge-neutral">Deactivated</span>{% endif %}
+      </td>
+      <td class="muted">{{ user.last_login_at.strftime('%Y-%m-%d %H:%M UTC') if user.last_login_at else 'Never' }}</td>
+      <td style="white-space:nowrap">
+        <details class="pw-reset">
+          <summary>Reset password</summary>
+          <form hx-post="/admin/users/{{ user.id }}/password" hx-target="#admin-users" hx-swap="outerHTML">
+            <input type="password" name="password" autocomplete="new-password" required
+                   minlength="{{ min_password_length }}" placeholder="New password ({{ min_password_length }}+ chars)"
+                   aria-label="New password for {{ user.display_name }}">
+            <button type="submit">Set</button>
+          </form>
+        </details>
+        {% if not is_self %}
+        <form hx-post="/admin/users/{{ user.id }}/active" hx-target="#admin-users" hx-swap="outerHTML" style="display:inline;margin:0"
+              {% if user.is_active %}hx-confirm="Deactivate {{ user.display_name }}? They'll be signed out and unable to sign in."{% endif %}>
+          <input type="hidden" name="active" value="{{ 'false' if user.is_active else 'true' }}">
+          <button type="submit" class="link">{{ 'Deactivate' if user.is_active else 'Reactivate' }}</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <h3 style="font-size:.9rem;margin:1.3rem 0 .5rem">Add user</h3>
+  <form class="add-user" hx-post="/admin/users" hx-target="#admin-users" hx-swap="outerHTML">
+    <div><label for="new-name">Display name</label><input type="text" id="new-name" name="display_name" required maxlength="200"></div>
+    <div><label for="new-email">Email</label><input type="email" id="new-email" name="email" required maxlength="320"></div>
+    <div>
+      <label for="new-role">Role</label>
+      <select id="new-role" name="role">
+        {% for r in roles %}<option value="{{ r.value }}" {{ 'selected' if r.value == 'VIEWER' else '' }}>{{ r.value | title }}</option>{% endfor %}
+      </select>
+    </div>
+    <div><label for="new-password">Initial password</label><input type="password" id="new-password" name="password" autocomplete="new-password" required minlength="{{ min_password_length }}" placeholder="{{ min_password_length }}+ characters"></div>
+    <div><button type="submit">Add user</button></div>
+  </form>
+</section>

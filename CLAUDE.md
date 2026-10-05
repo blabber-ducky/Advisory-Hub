@@ -131,6 +131,27 @@ data/                        # all persistent data, ./data/<volume> (git- and do
 
 Newest first. Update this when work lands.
 
+### 2026-10-05 — User administration on `/admin`
+- **On request** (user administration for admins, with role changes from
+  that view). D-046; architecture.md §3.3 and §6.
+- New `core/services/users.py`: list, add (≥12-char password, unique email),
+  change role, deactivate/reactivate, reset password. Each takes the acting
+  `Principal` and requires ADMIN itself; each change is audited
+  (`user.role_changed` records from/to). Lock-out guards: no changing your
+  own role or deactivating yourself; the last active admin can't be demoted
+  or deactivated (row-locked check). Deactivation and password reset end the
+  user's sessions; a role change applies on their next request.
+- `/admin` gains a Users section (`_admin_users.html`): role picker per row
+  (not for yourself), status, last sign-in, reset password, deactivate, add
+  user. Each action re-renders the section in place with a confirmation or
+  the rule it broke; actions run in a savepoint so a refusal undoes only its
+  own writes.
+- **Verified**: 732 tests (15 new in `tests/test_user_admin.py`); ruff/mypy
+  clean. Real HTTP run: add user → viewer gets 403 on import → promote to
+  analyst → 200 on their very next request; self-demotion refused; deactivate
+  → their session redirects to login and sign-in fails; reactivate → sign-in
+  works; audit trail correct. Screenshots checked in light and dark.
+
 ### 2026-10-05 — Upload email from the web app; header on IOCs / Affected Software
 - **On request.** Tracker page "Upload email" button (ANALYST+,
   `POST /inbox/upload`, multiple `.eml`/`.msg`): `ingest.pipeline.ingest_uploads()`
