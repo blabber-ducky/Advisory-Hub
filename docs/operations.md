@@ -59,6 +59,13 @@ stack itself only speaks HTTP; see §7.
 | `status-export [-o file.csv]` | Write every advisory's status + history as an importable CSV — the same file the daily job writes. Default: into `STATUS_EXPORT_DIR` as `status-export-<date>.csv` |
 | `tracker-to-csv <file.xlsx> [-o out.csv]` | Convert the manual tracker workbook into the editable import CSV (status + comment per advisory). No database needed. See architecture.md §3.3.3 |
 
+Outside a container, **`scripts/tracker-to-csv.sh <file.xlsx> [out.csv]`**
+runs that same conversion from a repo checkout (using `.venv`) or on any
+machine with Docker (the published image, no network, read-only, as your own
+user). Docker image: `IMAGE=…`, or `IMAGE_NAMESPACE`/`IMAGE_TAG` from the
+environment or `./.env`. The output defaults to the workbook's name with
+`.csv`.
+
 ## 1. Containers
 
 | Service | Image | Role |

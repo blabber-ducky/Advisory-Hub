@@ -117,6 +117,7 @@ docs/              # deployment.md is the production guide
 migrations/
 tests/
 docker/            # Dockerfile (app + worker + migrate image)
+scripts/           # tracker-to-csv.sh — manual tracker .xlsx → import CSV (venv or Docker)
 docker-compose.yml           # base stack (pulls images)
 docker-compose.override.yml  # dev: builds locally, reload — auto-applied
 docker-compose.prod.yml      # production, self-contained, behind your WAF — see docs/deployment.md
@@ -129,6 +130,19 @@ data/                        # all persistent data, ./data/<volume> (git- and do
 ## 4. Progress log
 
 Newest first. Update this when work lands.
+
+### 2026-10-05 — `scripts/tracker-to-csv.sh`
+- **On request** (a script for the manual tracker Excel → CSV conversion). A
+  wrapper, not a second converter: runs the existing `advisory-hub
+  tracker-to-csv` via the repo's `.venv`, or via Docker using the published
+  image (`--network none`, read-only, `--cap-drop ALL`, your uid, workbook
+  mounted read-only) — so its output is exactly the import page's.
+- **Verified**: both routes on the real tracker give byte-identical output
+  (174 rows), including a filename with a space; Docker output owned by the
+  caller, not root; clear errors for a missing file, non-`.xlsx`, missing
+  output folder, no image configured. Versus the CSV made on 2026-10-04,
+  every row is identical apart from the `ack_channel` column added since
+  (empty for the tracker) — the old file still imports.
 
 ### 2026-10-04 — HTTPS served by the app itself (no proxy needed)
 - **Why**: behind NAT with no proxy, sign-in reloaded the login page — the

@@ -276,8 +276,9 @@ every proposed status in the preview — it's an inference, not a fact
 | Re-importing the same file changes nothing and posts no duplicate comments | Safe to run again, e.g. monthly while both are in use |
 | Preview writes nothing; Apply is one transaction | All or nothing |
 
-**Editing before importing.** "Download as CSV" on the preview, or
-`advisory-hub tracker-to-csv` (operations.md, CLI), gives one flat CSV —
+**Editing before importing.** "Download as CSV" on the preview,
+`advisory-hub tracker-to-csv`, or `scripts/tracker-to-csv.sh` (operations.md,
+CLI — all the same conversion) gives one flat CSV —
 `advisory_ref, received_date, subject, status, comment, source, ack_channel` — with the
 proposed status and comment filled in. Correct the `status` column (any tool
 status, or blank for no change) or the comment, and upload the CSV instead
