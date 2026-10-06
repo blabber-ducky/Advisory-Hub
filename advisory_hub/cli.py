@@ -96,6 +96,36 @@ def cmd_list_users(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_duplicates(_args: argparse.Namespace) -> int:
+    """List advisories stored more than once (read-only)."""
+    from sqlalchemy import func
+
+    from .core.models.advisory import Comment
+    from .core.services.ingestion import existing_duplicates
+
+    with session_scope() as db:
+        groups = existing_duplicates(db)
+        if not groups:
+            print("No duplicates.")
+            return 0
+        extra = sum(len(g.advisories) - 1 for g in groups)
+        print(f"{len(groups)} group(s), {extra} extra advisory row(s). Oldest first — the")
+        print("one new imports would keep. Nothing is changed; resolve each by hand.\n")
+        for g in groups:
+            labels = {"DUPLICATE_MESSAGE_ID": "same email", "DUPLICATE_CONTENT": "same ref + PDF"}
+            label = " + ".join(labels[r] for r in labels if r in g.reasons)
+            print(f"[{label}] {g.advisories[0].external_ref or g.advisories[0].title[:60]}")
+            for a in g.advisories:
+                comments = db.scalar(
+                    select(func.count()).select_from(Comment).where(Comment.advisory_id == a.id)
+                )
+                print(
+                    f"    {a.id}  received {a.received_at:%Y-%m-%d %H:%M}  "
+                    f"status {a.status.value:<14} comments {comments}"
+                )
+    return 0
+
+
 def cmd_seed_sources(_args: argparse.Namespace) -> int:
     from .core.services.sources import seed_default_sources
 
@@ -350,6 +380,9 @@ def main() -> int:
 
     p = sub.add_parser("list-users", help="List user accounts")
     p.set_defaults(func=cmd_list_users)
+
+    p = sub.add_parser("duplicates", help="List advisories stored more than once (read-only)")
+    p.set_defaults(func=cmd_duplicates)
 
     p = sub.add_parser("seed-sources", help="Seed the known regulator sources")
     p.set_defaults(func=cmd_seed_sources)

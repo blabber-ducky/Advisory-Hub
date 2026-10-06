@@ -12,7 +12,12 @@
       <td>{{ row.name }}</td>
       <td>
         {% if o.status == 'INGESTED' %}<span class="badge badge-good">Ingested</span>
-        {% elif o.status == 'DUPLICATE' %}<span class="badge badge-neutral">Already ingested</span>
+        {% elif o.status == 'DUPLICATE' %}<span class="badge badge-neutral"
+          title="{{ {'DUPLICATE_HASH': 'This exact file was already imported',
+                     'DUPLICATE_MESSAGE_ID': 'Another copy of this same email (same Message-ID) was already imported',
+                     'DUPLICATE_CONTENT': 'Same reference number and identical PDF as an advisory already imported — a re-send or forwarded copy'}.get(o.duplicate_reason, '') }}">
+          {{ {'DUPLICATE_MESSAGE_ID': 'Already ingested (same email)',
+              'DUPLICATE_CONTENT': 'Already ingested (re-sent copy)'}.get(o.duplicate_reason, 'Already ingested') }}</span>
         {% elif o.status == 'QUEUED' %}<span class="badge badge-neutral">Queued for the worker</span>
         {% else %}<span class="badge badge-critical">Failed</span>{% endif %}
       </td>

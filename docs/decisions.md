@@ -1311,6 +1311,33 @@ rebuild `.eml` messages (it assumed `.msg`).
 
 ---
 
+## D-048 — Duplicate gates: Message-ID, then reference + identical PDF, under a lock
+
+**Date:** 2026-10-06 · **Status:** Accepted · **Corrects** ingestion.md §4, which claimed exact re-sends were caught by the content hash
+
+**Why**: duplicates appeared when importing emails. The only gate was
+sha256 of the file. Measured on the real corpus: 321 files, 186 emails —
+135 emails saved twice from Outlook, and Outlook writes per-save metadata
+into every `.msg`, so no two copies share bytes. Importing both exports made
+321 advisories.
+
+**Decision**:
+
+| Rule | Because |
+|---|---|
+| Same `Message-ID` → duplicate | It identifies the sent message; every copy of one email carries it |
+| Same reference **and** an identical PDF → duplicate | The regulator re-sends (DOH-2026545, -618) and forwarded copies get new Message-IDs; the PDF bytes are what's identical |
+| Same reference with a different PDF → **not** a duplicate | DOH-2026599 and -591 were re-issued with revised PDFs — genuine new notifications (D-020) |
+| A duplicate is audited on the advisory it duplicates (`advisory.duplicate_received`); the file is archived | Nothing silently dropped: a re-send is evidence |
+| Check + insert under `pg_advisory_xact_lock` | Upload, "Scan inbox now" and the poller run concurrently; without it, two copies at once both passed (5/5 runs) |
+| Duplicates already stored are reported (`advisory-hub duplicates`), never auto-merged | Each copy may carry its own status and comments — choosing which to keep is the analyst's call |
+
+**Rejected**: a unique index on `message_id` — existing databases already
+hold duplicates, so the migration would fail there; and a forwarded copy
+needs the content gate anyway.
+
+---
+
 ## Open decisions
 
 Tracked in `CLAUDE.md` §5 until resolved. When one is answered, record it here as

@@ -79,23 +79,43 @@ attributed to the uploader in the audit log.
 Poll every 30s (survives SMB/network mounts, unlike `inotify`). Claim by atomic
 rename into `/data/processing/<worker-id>/`.
 
-`dedupe_hash = sha256(raw bytes)` — exact resends are skipped.
+Duplicate gates (`core.services.ingestion.find_duplicate()`), checked in
+order under a transaction-level advisory lock — the upload button, "Scan inbox
+now" and the worker's poller can each be ingesting a copy of the same email at
+once (D-048):
 
-**The corpus proves that is not enough.** Two distinct duplication modes exist:
-
-| Mode | Example | Detection |
+| Gate | Catches | Corpus evidence |
 |---|---|---|
-| Exact resend, same ref | `DOH-2026545` ×2, 19 min apart; `DOH-2026599` ×2 | Content hash — automatic |
-| **Re-issue under a new ref** | `DOH-2026550` → `DOH-2026552`, identical title, 8h apart. Also `2026551`→`2026553`, `2026601`→`2026612`, `2026608`→`2026610` | **Hash will not catch this** |
+| `DUPLICATE_HASH` — sha256 of the raw file | The same file twice | — |
+| `DUPLICATE_MESSAGE_ID` — same `Message-ID` | The same email saved/exported again. **Outlook writes per-save metadata into a `.msg`, so copies never share bytes** — the hash alone let every one in | 135 emails exist as two exports (the original 135-file set and the later 186-file set): 321 files, 186 emails, all 321 byte-different |
+| `DUPLICATE_CONTENT` — same reference **and** a byte-identical PDF | The regulator re-sending it, or a forwarded copy (new Message-ID) | `DOH-2026545` re-sent 19 min later, `DOH-2026618` 16 h later — same PDF both times |
 
-Re-issues get different reference numbers and slightly different bytes, so they
-ingest as separate advisories — which is correct, they *are* separate regulator
-notifications. But the analyst must see the relationship. On ingest, compute a
-normalised-title fingerprint and, on a match within 14 days, create a
-`related_advisory` link of kind `POSSIBLE_REISSUE` and surface a banner. Never
-auto-merge: only the regulator can supersede its own advisory.
+A duplicate creates nothing. For `MESSAGE_ID` / `CONTENT` an
+`advisory.duplicate_received` audit entry (reason, Message-ID, sender, sent
+time) goes on the advisory it duplicates, so a re-send is on record. The
+upload result says which ("Already ingested (same email)" / "(re-sent
+copy)"). The file itself is archived as usual — never discarded.
 
-`Message-ID` is stored and indexed as a third signal.
+**Not duplicates — kept as separate advisories:**
+
+| Mode | Example | Handling |
+|---|---|---|
+| Re-issue under the **same** ref with a **revised PDF** | `DOH-2026599` (13:47 → 16:19, new PDF), `DOH-2026591` (1 Aug → 5 Aug) | Created; the title fingerprint links it `POSSIBLE_REISSUE` |
+| **Re-issue under a new ref** | `DOH-2026550` → `DOH-2026552`, identical title, 8h apart. Also `2026551`→`2026553`, `2026601`→`2026612`, `2026608`→`2026610` | Created; linked `POSSIBLE_REISSUE` |
+| Same ref, no PDF to compare | — | Created (nothing proves it's the same advisory); linked if the title matches |
+
+Re-issues are separate regulator notifications with their own SLA clocks, but
+the analyst must see the relationship. On ingest, a normalised-title
+fingerprint match within 14 days creates a `related_advisory` link of kind
+`POSSIBLE_REISSUE` and a banner. Never auto-merge: only the regulator can
+supersede its own advisory.
+
+**Verified against the real corpus**: importing both exports gives **184
+advisories** (186 emails − 2 re-sends; 133 caught by Message-ID, 4 by
+reference + PDF); before the gates, the same import gave 321.
+
+**Duplicates already stored** (ingested before these gates):
+`advisory-hub duplicates` lists them, read-only — see operations.md.
 
 ---
 

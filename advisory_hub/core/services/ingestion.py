@@ -7,6 +7,7 @@ message updates rather than duplicates (CLAUDE.md §2.2).
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from dataclasses import dataclass
 from datetime import timedelta
@@ -67,11 +68,34 @@ def ingest_parsed_advisory(
     actor = actor or Actor.system("ingest")
     message = parsed.message
 
-    existing = db.scalar(select(Advisory).where(Advisory.dedupe_hash == message.dedupe_hash))
-    if existing is not None:
-        return IngestResult(
-            advisory=existing, created=False, duplicate=True, reason="DUPLICATE_HASH"
-        )
+    # Serialise check-then-insert: the upload button, "Scan inbox now" and
+    # the worker's poller can each be ingesting a copy of the same email at
+    # once. Held until this transaction ends; parsing (the slow part) has
+    # already happened, so this only orders the short database step.
+    db.execute(select(func.pg_advisory_xact_lock(_INGEST_LOCK_KEY)))
+
+    duplicate = find_duplicate(db, parsed)
+    if duplicate is not None:
+        existing, reason = duplicate
+        if reason != "DUPLICATE_HASH":
+            # A different email that is the same advisory — record that it
+            # arrived, on the advisory it duplicates. (A byte-identical file
+            # is the same drop twice; nothing new to record.)
+            record(
+                db,
+                actor=actor,
+                action="advisory.duplicate_received",
+                entity_type="advisory",
+                entity_id=existing.id,
+                detail={
+                    "reason": reason,
+                    "message_id": message.message_id,
+                    "sender": message.sender,
+                    "sent_at": message.sent_at.isoformat() if message.sent_at else None,
+                    "external_ref": parsed.external_ref,
+                },
+            )
+        return IngestResult(advisory=existing, created=False, duplicate=True, reason=reason)
 
     resolution = resolve_source(db, message.sender_email, parsed.external_ref)
 
@@ -139,6 +163,129 @@ def ingest_parsed_advisory(
         },
     )
     return IngestResult(advisory=advisory, created=True)
+
+
+#: Key for the transaction-level advisory lock around duplicate check + insert.
+_INGEST_LOCK_KEY = 0x41_44_56_48  # "ADVH"
+
+
+def find_duplicate(db: DbSession, parsed: ParsedAdvisory) -> tuple[Advisory, str] | None:
+    """The advisory this message duplicates, and why — or ``None``.
+
+    Three gates, strongest first:
+
+    ``DUPLICATE_HASH``
+        Byte-identical file.
+    ``DUPLICATE_MESSAGE_ID``
+        Same Message-ID: the same email saved or exported again. Outlook
+        writes per-save metadata into a .msg, so copies never share bytes.
+    ``DUPLICATE_CONTENT``
+        Same reference number *and* a byte-identical PDF attachment: the
+        regulator re-sending it, or a forwarded copy. A same-number re-issue
+        with a revised PDF is not a duplicate — it's kept and linked as a
+        possible re-issue (D-020, D-048).
+    """
+    message = parsed.message
+    existing = db.scalar(select(Advisory).where(Advisory.dedupe_hash == message.dedupe_hash))
+    if existing is not None:
+        return existing, "DUPLICATE_HASH"
+
+    if message.message_id:
+        existing = db.scalar(
+            select(Advisory)
+            .where(Advisory.message_id == message.message_id)
+            .order_by(Advisory.received_at)
+            .limit(1)
+        )
+        if existing is not None:
+            return existing, "DUPLICATE_MESSAGE_ID"
+
+    pdf_hashes = {hashlib.sha256(att.data).hexdigest() for att in message.pdfs}
+    if parsed.external_ref and pdf_hashes:
+        existing = db.scalar(
+            select(Advisory)
+            .join(AdvisoryAttachment, AdvisoryAttachment.advisory_id == Advisory.id)
+            .join(Blob, Blob.id == AdvisoryAttachment.blob_id)
+            .where(Advisory.external_ref == parsed.external_ref, Blob.sha256.in_(pdf_hashes))
+            .order_by(Advisory.received_at)
+            .limit(1)
+        )
+        if existing is not None:
+            return existing, "DUPLICATE_CONTENT"
+    return None
+
+
+@dataclass(slots=True)
+class DuplicateGroup:
+    """Advisories already stored that the gates would now have kept as one."""
+
+    #: Every gate that links them: DUPLICATE_MESSAGE_ID and/or DUPLICATE_CONTENT.
+    reasons: set[str]
+    advisories: list[Advisory]  # oldest first — the one the gates would keep
+
+
+def existing_duplicates(db: DbSession) -> list[DuplicateGroup]:
+    """Read-only: duplicates ingested before the Message-ID / content gates.
+
+    Advisories are clustered: two are in one group when they share a
+    Message-ID, or a reference number plus an identical PDF — directly or
+    through another member (a re-sent advisory whose two emails were each
+    saved twice is one group of four). Never merges: each copy may carry its
+    own status and comments, so which one to keep is an analyst's call.
+    """
+    parent: dict[uuid.UUID, uuid.UUID] = {}
+    links: list[tuple[uuid.UUID, str]] = []
+
+    def find(x: uuid.UUID) -> uuid.UUID:
+        while parent.setdefault(x, x) != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def link(ids: list[uuid.UUID], reason: str) -> None:
+        for other in ids[1:]:
+            a, b = find(ids[0]), find(other)
+            parent[b] = a
+        links.append((ids[0], reason))
+
+    by_message_id = (
+        select(func.array_agg(Advisory.id))
+        .where(Advisory.message_id.is_not(None))
+        .group_by(Advisory.message_id)
+        .having(func.count() > 1)
+    )
+    for ids in db.scalars(by_message_id):
+        link(list(ids), "DUPLICATE_MESSAGE_ID")
+
+    by_content = (
+        select(func.array_agg(func.distinct(Advisory.id)))
+        .join(AdvisoryAttachment, AdvisoryAttachment.advisory_id == Advisory.id)
+        .join(Blob, Blob.id == AdvisoryAttachment.blob_id)
+        .where(Advisory.external_ref.is_not(None))
+        .group_by(Advisory.external_ref, Blob.sha256)
+        .having(func.count(func.distinct(Advisory.id)) > 1)
+    )
+    for ids in db.scalars(by_content):
+        link(list(ids), "DUPLICATE_CONTENT")
+
+    clusters: dict[uuid.UUID, set[uuid.UUID]] = {}
+    for member in list(parent):
+        clusters.setdefault(find(member), set()).add(member)
+    groups: list[DuplicateGroup] = []
+    for members in clusters.values():
+        if len(members) < 2:
+            continue
+        advisories = list(
+            db.scalars(
+                select(Advisory)
+                .where(Advisory.id.in_(members))
+                .order_by(Advisory.received_at, Advisory.created_at)
+            )
+        )
+        why = {reason for member, reason in links if member in members}
+        groups.append(DuplicateGroup(why, advisories))
+    groups.sort(key=lambda g: g.advisories[0].received_at)
+    return groups
 
 
 def _apply_sla(advisory: Advisory) -> None:

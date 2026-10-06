@@ -34,6 +34,8 @@ class IngestOutcome:
     source_code: str | None = None
     #: SourceMethod value — "NONE" means no source was detected.
     source_method: str | None = None
+    #: Why a DUPLICATE was one — see core.services.ingestion.find_duplicate().
+    duplicate_reason: str | None = None
 
 
 def ingest_file(
@@ -61,6 +63,7 @@ def ingest_file(
             source_code = result.advisory.source.short_code if result.advisory else None
             method = result.advisory.source_method.value if result.advisory else None
             status = "DUPLICATE" if result.duplicate else "INGESTED"
+            duplicate_reason = result.reason if result.duplicate else None
     except Exception as exc:
         return IngestOutcome(path, "FAILED", error=f"PERSIST: {type(exc).__name__}: {exc}")
 
@@ -71,6 +74,7 @@ def ingest_file(
         external_ref=ref,
         source_code=source_code,
         source_method=method,
+        duplicate_reason=duplicate_reason,
     )
 
 

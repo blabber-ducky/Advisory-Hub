@@ -131,6 +131,30 @@ data/                        # all persistent data, ./data/<volume> (git- and do
 
 Newest first. Update this when work lands.
 
+### 2026-10-06 — Duplicate gates on import
+- **Reported**: duplicates when importing emails. **Cause**: the only gate
+  was sha256 of the file; Outlook writes per-save metadata into each `.msg`,
+  so the same email saved twice never matched. Corpus: 321 files = 186
+  emails; importing both exports made 321 advisories. D-048.
+- `ingestion.find_duplicate()`: hash → same Message-ID → same reference +
+  identical PDF (re-send / forward). Same reference with a revised PDF is
+  still a separate advisory (re-issue). Check + insert under a
+  transaction-level advisory lock (upload, scan button and poller run
+  concurrently). Duplicates of a different email are audited
+  (`advisory.duplicate_received`) on the kept advisory; upload results
+  say "Already ingested (same email)" / "(re-sent copy)".
+- `advisory-hub duplicates`: read-only report of duplicates already stored,
+  clustered (Message-ID or ref + PDF, transitively), oldest first. No
+  auto-merge.
+- ingestion.md §4 corrected — it claimed re-sends were caught by the hash
+  and listed DOH-2026599 (a re-issue with a new PDF) as a re-send.
+- **Verified**: 10 new tests (`tests/test_dedupe.py`, written failing first);
+  the concurrency test fails 5/5 with the lock removed, passes 5/5 with it.
+  Real corpus, both exports: old code → 321 advisories; new → 184 (133 by
+  Message-ID, 4 by ref + PDF; DOH-2026599/-591 kept as re-issues). The
+  report on the old database: 133 groups, 137 extra rows (= 321 − 184).
+  763 tests, ruff/mypy clean.
+
 ### 2026-10-05 — Source from the DOH reference; set source by hand; uniform buttons
 - **On request**: DOH-xxxxx advisories attributed to the Department of
   Health; source settable when not detected, on upload and in the detail

@@ -56,6 +56,7 @@ stack itself only speaks HTTP; see §7.
 | `create-token` | Mint a scoped API token — **shown once** |
 | `list-users` | List accounts and roles |
 | `check` | Verify database, blob volume, inbox, and schema |
+| `duplicates` | Read-only. Lists advisories stored more than once — copies of one email (same Message-ID) or re-sends (same reference + identical PDF), grouped, oldest first (the one the import gates keep now), with each copy's status and comment count. Changes nothing: pick the copy to keep, carry over any status/comments, and close the others (e.g. as Not applicable with a comment naming the kept one). See ingestion.md §4 |
 | `status-export [-o file.csv]` | Write every advisory's status + history as an importable CSV — the same file the daily job writes. Default: into `STATUS_EXPORT_DIR` as `status-export-<date>.csv` |
 | `tracker-to-csv <file.xlsx> [-o out.csv]` | Convert the manual tracker workbook into the editable import CSV (status + comment per advisory). No database needed. See architecture.md §3.3.3 |
 
