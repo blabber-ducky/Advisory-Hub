@@ -131,6 +131,29 @@ data/                        # all persistent data, ./data/<volume> (git- and do
 
 Newest first. Update this when work lands.
 
+### 2026-10-06 — Custom sources, bulk edit, resizable columns, grouped admin
+- **On request.** D-051.
+- **Sources** on /admin (Email intake): add / edit / deactivate
+  (`sources.create_source|update_source|set_source_active`, ADMIN, audited,
+  validated: unique code+name, sender address/domain syntax, UNKNOWN
+  reserved and immutable). Active ones feed detection and every source
+  picker (detail, upload result, bulk bar).
+- **Bulk edit** on the tracker (ANALYST+): row checkboxes + select-page,
+  sticky bar → Set source / Change status (+ack channel, comment required).
+  `advisories.bulk_change_status|bulk_change_source` reuse the single-item
+  services per advisory in savepoints; skipped ones listed with reasons;
+  table refreshes via `tracker-refresh`.
+- **Resizable columns** (tracker, IOCs, affected software): drag header
+  edge, per-browser localStorage, double-click resets, re-applied after htmx
+  swaps. Found and fixed while verifying in Chromium: the title column's
+  `max-width` made Chrome redistribute user-set widths.
+- **Admin page**: four collapsible groups with status summaries, jump bar,
+  expand/collapse all, open state remembered.
+- **Verified**: 15 new tests (`tests/test_sources_bulk.py`); 850 total,
+  ruff/mypy clean. Real app + headless Chromium harness: ticking rows shows
+  the bar with the count and highlights rows; dragging Title +220 px →
+  saved and restored exactly after reload. Screenshots of tracker and admin.
+
 ### 2026-10-06 — Ivanti ITSM: Create ticket from an advisory
 - **On request** (tenant FRSHEATIntegration SOAP; WSDL read — 36 ops). User
   chose: button only; Service Request; pop-up with Service → Category →

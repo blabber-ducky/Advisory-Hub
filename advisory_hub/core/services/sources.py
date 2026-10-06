@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
 from ..models.advisory import Source
-from ..models.enums import SourceMethod
+from ..models.enums import Role, SourceMethod
+from .audit import record
+from .auth import Principal
 
 if TYPE_CHECKING:
     from ...ingest.message import ParsedMessage
@@ -144,3 +147,145 @@ def seed_default_sources(db: DbSession) -> list[Source]:
     get_or_create_unknown(db)
     db.flush()
     return created
+
+
+# ─── Admin: managing sources ─────────────────────────────────────────────────
+
+
+class SourceAdminError(ValueError):
+    """A request that breaks a rule; the message is safe to show the admin."""
+
+
+_CODE = re.compile(r"^[A-Z][A-Z0-9]{1,9}$")
+_PATTERN = re.compile(r"^(?:[^@\s]+@)?[a-z0-9-]+(?:\.[a-z0-9-]+)+$")
+#: Reference detection ("DOH-2026550") matches prefixes of 2 to 6 letters.
+REFERENCE_CODE = re.compile(r"^[A-Z]{2,6}$")
+
+
+def _clean(
+    db: DbSession, name: str, short_code: str, patterns: str, *, exclude: uuid.UUID | None = None
+) -> tuple[str, str, list[str]]:
+    name = " ".join(name.split())
+    code = short_code.strip().upper()
+    if not name or len(name) > 200:
+        raise SourceAdminError("Enter a name (up to 200 characters).")
+    if not _CODE.match(code):
+        raise SourceAdminError(
+            "Short code: 2 to 10 capital letters or digits, starting with a letter "
+            "(e.g. DOH, NCEMA)."
+        )
+    if code == UNKNOWN_SOURCE_CODE:
+        raise SourceAdminError(f"{UNKNOWN_SOURCE_CODE} is reserved.")
+    cleaned: list[str] = []
+    for line in patterns.replace(",", "\n").splitlines():
+        p = line.strip().lower().lstrip("@")
+        if not p:
+            continue
+        if not _PATTERN.match(p):
+            raise SourceAdminError(
+                f"Sender {line.strip()!r} isn't an email address or a domain (e.g. doh.gov.ae)."
+            )
+        if p not in cleaned:
+            cleaned.append(p)
+    for column, value, label in (
+        (Source.name, name, "name"),
+        (Source.short_code, code, "short code"),
+    ):
+        clash = db.scalar(select(Source).where(func.lower(column) == value.lower()))
+        if clash is not None and clash.id != exclude:
+            raise SourceAdminError(f"Another source already has that {label}.")
+    return name, code, cleaned
+
+
+def create_source(
+    db: DbSession, principal: Principal, *, name: str, short_code: str, sender_patterns: str
+) -> Source:
+    principal.require_role(Role.ADMIN)
+    name, code, patterns = _clean(db, name, short_code, sender_patterns)
+    source = Source(name=name, short_code=code, sender_patterns=patterns, is_active=True)
+    db.add(source)
+    db.flush()
+    record(
+        db,
+        actor=principal.to_actor(),
+        action="source.created",
+        entity_type="source",
+        entity_id=source.id,
+        detail={"name": name, "short_code": code, "sender_patterns": patterns},
+    )
+    return source
+
+
+def update_source(
+    db: DbSession,
+    principal: Principal,
+    source_id: uuid.UUID,
+    *,
+    name: str,
+    short_code: str,
+    sender_patterns: str,
+) -> Source:
+    """Rename or re-pattern a source. Advisories already filed under it stay
+    there; the new patterns apply to mail from now on (and to a re-parse)."""
+    principal.require_role(Role.ADMIN)
+    source = _editable(db, source_id)
+    name, code, patterns = _clean(db, name, short_code, sender_patterns, exclude=source.id)
+    before = {
+        "name": source.name,
+        "short_code": source.short_code,
+        "sender_patterns": list(source.sender_patterns or []),
+    }
+    source.name, source.short_code, source.sender_patterns = name, code, patterns
+    after = {"name": name, "short_code": code, "sender_patterns": patterns}
+    record(
+        db,
+        actor=principal.to_actor(),
+        action="source.updated",
+        entity_type="source",
+        entity_id=source.id,
+        detail={k: {"from": before[k], "to": after[k]} for k in after if before[k] != after[k]},
+    )
+    return source
+
+
+def set_source_active(
+    db: DbSession, principal: Principal, source_id: uuid.UUID, active: bool
+) -> Source:
+    """Deactivate instead of delete: advisories keep pointing at it, but it's
+    no longer matched, offered in pickers, or shown in the tracker filter."""
+    principal.require_role(Role.ADMIN)
+    source = _editable(db, source_id)
+    if source.is_active is not active:
+        source.is_active = active
+        record(
+            db,
+            actor=principal.to_actor(),
+            action="source.activated" if active else "source.deactivated",
+            entity_type="source",
+            entity_id=source.id,
+            detail={"short_code": source.short_code},
+        )
+    return source
+
+
+def sources_with_counts(db: DbSession) -> list[tuple[Source, int]]:
+    """Every source but UNKNOWN, with how many advisories it holds."""
+    from ..models.advisory import Advisory
+
+    query = select(Advisory.source_id, func.count()).group_by(Advisory.source_id)
+    counts: dict[uuid.UUID, int] = dict(db.execute(query).tuples().all())
+    rows = db.scalars(
+        select(Source)
+        .where(Source.short_code != UNKNOWN_SOURCE_CODE)
+        .order_by(Source.is_active.desc(), Source.name)
+    )
+    return [(s, counts.get(s.id, 0)) for s in rows]
+
+
+def _editable(db: DbSession, source_id: uuid.UUID) -> Source:
+    source = db.get(Source, source_id)
+    if source is None:
+        raise LookupError(source_id)
+    if source.short_code == UNKNOWN_SOURCE_CODE:
+        raise SourceAdminError("The Unknown sender source is built in and can't be changed.")
+    return source

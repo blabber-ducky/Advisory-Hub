@@ -1,75 +1,143 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 style="font-size:1.3rem;margin:0 0 1rem">Admin</h1>
+{% set sso = (entra_cards | selectattr('kind.value', 'equalto', 'ENTRA_SSO') | first) %}
+{% set mailbox = (entra_cards | selectattr('kind.value', 'equalto', 'MAILBOX_SYNC') | first) %}
+{% set active_users = users | selectattr('is_active') | list | length %}
+{% set active_sources = source_rows | selectattr('0.is_active') | list | length %}
+{% macro onoff(flag) %}<span class="badge {{ 'badge-good' if flag else 'badge-neutral' }}">{{ 'On' if flag else 'Off' }}</span>{% endmacro %}
 
-{% include "_admin_users.html" %}
+<div class="admin-head">
+  <h1 style="font-size:1.3rem;margin:0">Admin</h1>
+  <nav class="admin-jump" aria-label="Admin sections">
+    <a href="#group-people">People &amp; access</a>
+    <a href="#group-intake">Email intake</a>
+    <a href="#group-ticketing">Ticketing</a>
+    <a href="#group-enrichment">Enrichment</a>
+    <button type="button" class="link" data-admin-toggle-all>Expand all</button>
+  </nav>
+</div>
 
-<h2 style="font-size:1.05rem;margin:0 0 .8rem">Microsoft 365</h2>
-{% for card in entra_cards %}{% with kind=card.kind, app=card.app, redirect_uri=card.redirect_uri, sync_state=card.sync_state, poll_default=card.poll_default, entra_error=None, entra_notice=None %}{% include "_admin_entra_card.html" %}{% endwith %}{% endfor %}
-
-<h2 style="font-size:1.05rem;margin:0 0 .8rem">Ticketing</h2>
-{% include "_admin_ivanti_card.html" %}
-
-<h2 style="font-size:1.05rem;margin:0 0 .3rem">Integrations</h2>
-<p style="color:var(--muted);font-size:.85rem;margin:0 0 1.2rem">
-  Global API integrations. Keys set here take priority over the equivalent
-  environment variable and apply immediately — no restart needed.
-</p>
-
-{% if form_error %}
-<p class="error" role="alert">{{ form_error }}</p>
-{% endif %}
-
-{% for item in integrations %}
-{% set kind = item.kind %}
-{% set row = item.row %}
-{% set resolved = item.resolved %}
-<div class="card" style="margin-bottom:1.2rem">
-  <div style="display:flex;justify-content:space-between;align-items:center">
-    <h3 style="margin:0">{{ kind.value | title if kind.value != 'NVD' else 'NVD' }}</h3>
-    {% if resolved.enabled %}
-      <span class="badge badge-good">Enabled</span>
-    {% else %}
-      <span class="badge badge-neutral">Disabled</span>
-    {% endif %}
+<details class="admin-group" id="group-people" open>
+  <summary>
+    <span class="group-title">People &amp; access</span>
+    <span class="group-meta">{{ active_users }} active user{{ '' if active_users == 1 else 's' }} · Microsoft sign-in {{ onoff(sso.app.enabled) }}</span>
+  </summary>
+  <div class="group-body">
+    {% include "_admin_users.html" %}
+    {% with card=sso %}{% with kind=card.kind, app=card.app, redirect_uri=card.redirect_uri, sync_state=card.sync_state, poll_default=card.poll_default, entra_error=None, entra_notice=None %}{% include "_admin_entra_card.html" %}{% endwith %}{% endwith %}
   </div>
+</details>
 
-  <dl class="kv" style="margin-top:.6rem">
-    <dt>Configuration source</dt>
-    <dd>
-      {% if resolved.source == 'admin_panel' %}
-        <span class="badge badge-neutral">Set here</span>
-        {% if row and row.updated_at %}
-          <span style="font-size:.78rem;color:var(--muted)">— last changed {{ row.updated_at.strftime('%Y-%m-%d %H:%M UTC') }}{% if row.updated_by %} by {{ row.updated_by.display_name }}{% endif %}</span>
+<details class="admin-group" id="group-intake">
+  <summary>
+    <span class="group-title">Email intake</span>
+    <span class="group-meta">{{ active_sources }} active source{{ '' if active_sources == 1 else 's' }} · Mailbox sync {{ onoff(mailbox.app.enabled) }}</span>
+  </summary>
+  <div class="group-body">
+    <div class="card" style="margin-bottom:1.2rem">
+      <h3 style="margin:0 0 .3rem">Sources</h3>
+      {% include "_admin_sources.html" %}
+    </div>
+    {% with card=mailbox %}{% with kind=card.kind, app=card.app, redirect_uri=card.redirect_uri, sync_state=card.sync_state, poll_default=card.poll_default, entra_error=None, entra_notice=None %}{% include "_admin_entra_card.html" %}{% endwith %}{% endwith %}
+  </div>
+</details>
+
+<details class="admin-group" id="group-ticketing">
+  <summary>
+    <span class="group-title">Ticketing</span>
+    <span class="group-meta">Ivanti ITSM {{ onoff(ivanti.enabled) }}</span>
+  </summary>
+  <div class="group-body">
+    {% include "_admin_ivanti_card.html" %}
+  </div>
+</details>
+
+<details class="admin-group" id="group-enrichment">
+  <summary>
+    <span class="group-title">Enrichment</span>
+    <span class="group-meta">{% for item in integrations %}{{ 'NVD' if item.kind.value == 'NVD' else 'VirusTotal' }} {{ onoff(item.resolved.enabled) }}{{ ' · ' if not loop.last }}{% endfor %}</span>
+  </summary>
+  <div class="group-body">
+    <p class="muted" style="font-size:.85rem;margin:0 0 1rem">
+      Keys set here take priority over the equivalent environment variable and apply immediately — no restart needed.
+      Inventory API integrations (Desktop Central, Azure ARM, MS Graph) are managed per source under <a href="/inventory">Inventory</a>.
+    </p>
+    {% if form_error %}
+    <p class="error" role="alert">{{ form_error }}</p>
+    {% endif %}
+
+    {% for item in integrations %}
+    {% set kind = item.kind %}
+    {% set row = item.row %}
+    {% set resolved = item.resolved %}
+    <div class="card" style="margin-bottom:1.2rem">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0">{{ kind.value | title if kind.value != 'NVD' else 'NVD' }}</h3>
+        {% if resolved.enabled %}
+          <span class="badge badge-good">Enabled</span>
+        {% else %}
+          <span class="badge badge-neutral">Disabled</span>
         {% endif %}
-      {% elif resolved.source == 'environment' %}
-        <span class="badge badge-neutral">Environment variable</span>
-        <span style="font-size:.78rem;color:var(--muted)">— {{ 'NVD_API_KEY' if kind.value == 'NVD' else 'VT_API_KEY' }}, no admin override set</span>
-      {% else %}
-        <span style="color:var(--muted);font-size:.85rem">Not configured</span>
-      {% endif %}
-    </dd>
-    <dt>API key</dt>
-    <dd>{{ 'Configured (write-only — never displayed)' if resolved.api_key else 'Not set' }}</dd>
-  </dl>
+      </div>
 
-  <form class="status-form" hx-post="/admin/integrations/{{ kind.value }}/key" hx-target="body" hx-swap="none" style="margin-top:.8rem">
-    <label for="api_key_{{ kind.value }}">{{ 'Set' if not resolved.api_key or resolved.source != 'admin_panel' else 'Rotate' }} API key</label>
-    <input type="password" name="api_key" id="api_key_{{ kind.value }}" autocomplete="off" placeholder="Paste the key — never shown again after saving">
-    <button type="submit">Save</button>
-  </form>
+      <dl class="kv" style="margin-top:.6rem">
+        <dt>Configuration source</dt>
+        <dd>
+          {% if resolved.source == 'admin_panel' %}
+            <span class="badge badge-neutral">Set here</span>
+            {% if row and row.updated_at %}
+              <span style="font-size:.78rem;color:var(--muted)">— last changed {{ row.updated_at.strftime('%Y-%m-%d %H:%M UTC') }}{% if row.updated_by %} by {{ row.updated_by.display_name }}{% endif %}</span>
+            {% endif %}
+          {% elif resolved.source == 'environment' %}
+            <span class="badge badge-neutral">Environment variable</span>
+            <span style="font-size:.78rem;color:var(--muted)">— {{ 'NVD_API_KEY' if kind.value == 'NVD' else 'VT_API_KEY' }}, no admin override set</span>
+          {% else %}
+            <span style="color:var(--muted);font-size:.85rem">Not configured</span>
+          {% endif %}
+        </dd>
+        <dt>API key</dt>
+        <dd>{{ 'Configured (write-only — never displayed)' if resolved.api_key else 'Not set' }}</dd>
+      </dl>
 
-  <form hx-post="/admin/integrations/{{ kind.value }}/toggle" hx-target="body" hx-swap="none" style="margin-top:.5rem">
-    <button type="submit" class="link">{{ 'Disable' if resolved.enabled else 'Enable' }}</button>
-  </form>
-</div>
-{% endfor %}
+      <form class="status-form" hx-post="/admin/integrations/{{ kind.value }}/key" hx-target="body" hx-swap="none" style="margin-top:.8rem">
+        <label for="api_key_{{ kind.value }}">{{ 'Set' if not resolved.api_key or resolved.source != 'admin_panel' else 'Rotate' }} API key</label>
+        <input type="password" name="api_key" id="api_key_{{ kind.value }}" autocomplete="off" placeholder="Paste the key — never shown again after saving">
+        <button type="submit">Save</button>
+      </form>
 
-<div class="detail-section">
-  <h3>Inventory API integrations</h3>
-  <p style="color:var(--muted);font-size:.85rem">
-    Desktop Central, Azure ARM, and MS Graph credentials are managed per-source
-    under <a href="/inventory">Inventory</a>, not here.
-  </p>
-</div>
+      <form hx-post="/admin/integrations/{{ kind.value }}/toggle" hx-target="body" hx-swap="none" style="margin-top:.5rem">
+        <button type="submit" class="link">{{ 'Disable' if resolved.enabled else 'Enable' }}</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+</details>
+
+<script>
+  // Remember which groups are open (per browser); a link to #group-… opens it.
+  (function () {
+    var KEY = "ah-admin-open";
+    var groups = Array.prototype.slice.call(document.querySelectorAll(".admin-group"));
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { saved = null; }
+    if (Array.isArray(saved)) groups.forEach(function (g) { g.open = saved.indexOf(g.id) !== -1; });
+    function store() {
+      try { localStorage.setItem(KEY, JSON.stringify(groups.filter(function (g) { return g.open; }).map(function (g) { return g.id; }))); } catch (e) {}
+      var btn = document.querySelector("[data-admin-toggle-all]");
+      if (btn) btn.textContent = groups.every(function (g) { return g.open; }) ? "Collapse all" : "Expand all";
+    }
+    groups.forEach(function (g) { g.addEventListener("toggle", store); });
+    function openHash() {
+      var g = document.getElementById(location.hash.slice(1));
+      if (g && g.classList.contains("admin-group")) { g.open = true; g.scrollIntoView({ block: "start" }); }
+    }
+    window.addEventListener("hashchange", openHash);
+    openHash();
+    document.querySelector("[data-admin-toggle-all]").addEventListener("click", function () {
+      var openAll = !groups.every(function (g) { return g.open; });
+      groups.forEach(function (g) { g.open = openAll; });
+    });
+    store();
+  })();
+</script>
 {% endblock %}

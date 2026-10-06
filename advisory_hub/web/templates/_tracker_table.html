@@ -1,11 +1,12 @@
 {% import "_macros.html" as m %}
 {# Rendered both on full page load and as an HTMX partial when filters change
    (target #tracker-body via hx-get, so the KPI tiles above stay put). #}
-<div id="tracker-body">
+<div id="tracker-body" hx-get="{{ page_url(result.page) if result.items else '/' }}" hx-trigger="tracker-refresh from:body" hx-swap="outerHTML">
   {% if result.items %}
-  <table class="tracker">
+  <table class="tracker" data-resizable="tracker">
     <thead>
       <tr>
+        {% if can_bulk %}<th class="col-select" data-no-resize><input type="checkbox" data-bulk-all aria-label="Select all on this page"></th>{% endif %}
         <th>Source</th>
         <th>Type</th>
         <th class="col-title">Title</th>
@@ -18,6 +19,7 @@
     <tbody>
       {% for advisory in result.items %}
       <tr class="advisory-row" onclick="location.href='/advisories/{{ advisory.id }}'">
+        {% if can_bulk %}<td class="col-select" onclick="event.stopPropagation()"><input type="checkbox" name="ids" value="{{ advisory.id }}" form="bulk-form" aria-label="Select {{ advisory.external_ref or 'advisory' }}"></td>{% endif %}
         <td>{{ advisory.source.short_code }}</td>
         <td>{{ m.type_badge(advisory.type.value) }}</td>
         <td class="col-title">

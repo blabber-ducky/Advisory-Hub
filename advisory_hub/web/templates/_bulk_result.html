@@ -1,0 +1,14 @@
+{# Outcome of a bulk edit, shown above the tracker table. #}
+{% if bulk_error %}
+<p class="error" role="alert">{{ bulk_error }}</p>
+{% elif bulk %}
+<div class="notice" role="status">
+  <strong>{{ 'Source set' if bulk_action == 'source' else 'Status changed' }} for {{ bulk.updated | length }} advisor{{ 'y' if bulk.updated | length == 1 else 'ies' }}.</strong>
+  {% if bulk.skipped %}
+  {{ bulk.skipped | length }} skipped:
+  <ul class="bulk-skipped">
+    {% for ref, why in bulk.skipped %}<li><code>{{ ref }}</code> — {{ why }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% endif %}

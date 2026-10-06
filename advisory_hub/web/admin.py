@@ -59,6 +59,7 @@ def index(
         "integrations": _integration_rows(db),
         "entra_cards": [_entra_context(db, kind) for kind in svc.ENTRA_KINDS],
         **_ivanti_context(db),
+        **_sources_context(db),
         **_users_context(db, principal),
     }
     return templates.TemplateResponse(request, "admin_index.html", context)
@@ -600,3 +601,101 @@ def refresh_ivanti_lists(
         return "Lists will be re-read from Ivanti the next time they're needed."
 
     return _ivanti_response(request, db, principal, action)
+
+
+# ─── Sources ─────────────────────────────────────────────────────────────────
+
+
+def _sources_context(
+    db: DbSession, *, error: str | None = None, notice: str | None = None
+) -> dict[str, object]:
+    from ..core.services import sources
+
+    return {
+        "source_rows": sources.sources_with_counts(db),
+        "sources_error": error,
+        "sources_notice": notice,
+    }
+
+
+def _sources_action(
+    request: Request, db: DbSession, principal: Principal, action: Callable[[], str]
+) -> HTMLResponse:
+    from ..core.services import sources
+
+    try:
+        with db.begin_nested():
+            notice = action()
+    except PermissionDeniedError:
+        raise HTTPException(status_code=403, detail="Insufficient role") from None
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Source not found") from None
+    except sources.SourceAdminError as exc:
+        context = _sources_context(db, error=str(exc))
+        return templates.TemplateResponse(request, "_admin_sources.html", context)
+    db.commit()
+    context = _sources_context(db, notice=notice)
+    return templates.TemplateResponse(request, "_admin_sources.html", context)
+
+
+@router.post("/admin/sources", response_class=HTMLResponse)
+def add_source(
+    request: Request,
+    name: str = Form(""),
+    short_code: str = Form(""),
+    sender_patterns: str = Form(""),
+    db: DbSession = Depends(db_session),
+    principal: Principal = Depends(_require_web_principal),
+) -> HTMLResponse:
+    from ..core.services import sources
+
+    def action() -> str:
+        source = sources.create_source(
+            db, principal, name=name, short_code=short_code, sender_patterns=sender_patterns
+        )
+        return f"Added {source.short_code} — {source.name}."
+
+    return _sources_action(request, db, principal, action)
+
+
+@router.post("/admin/sources/{source_id}", response_class=HTMLResponse)
+def edit_source(
+    source_id: uuid.UUID,
+    request: Request,
+    name: str = Form(""),
+    short_code: str = Form(""),
+    sender_patterns: str = Form(""),
+    db: DbSession = Depends(db_session),
+    principal: Principal = Depends(_require_web_principal),
+) -> HTMLResponse:
+    from ..core.services import sources
+
+    def action() -> str:
+        source = sources.update_source(
+            db,
+            principal,
+            source_id,
+            name=name,
+            short_code=short_code,
+            sender_patterns=sender_patterns,
+        )
+        return f"Saved {source.short_code}."
+
+    return _sources_action(request, db, principal, action)
+
+
+@router.post("/admin/sources/{source_id}/active", response_class=HTMLResponse)
+def set_source_active(
+    source_id: uuid.UUID,
+    request: Request,
+    active: bool = Form(...),
+    db: DbSession = Depends(db_session),
+    principal: Principal = Depends(_require_web_principal),
+) -> HTMLResponse:
+    from ..core.services import sources
+
+    def action() -> str:
+        source = sources.set_source_active(db, principal, source_id, active)
+        return f"{'Reactivated' if active else 'Deactivated'} {source.short_code}."
+
+    return _sources_action(request, db, principal, action)

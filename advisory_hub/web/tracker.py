@@ -79,6 +79,10 @@ def index(request: Request, db: DbSession = Depends(db_session)) -> object:
             "can_scan_inbox": principal.user is not None
             and principal.user.role.satisfies(Role.ANALYST),
             "inbox_scan_result": _inbox_scan_result(request),
+            "can_bulk": principal.user is not None and principal.user.role.satisfies(Role.ANALYST),
+            "bulk_sources": sources_svc.assignable_sources(db),
+            "bulk_statuses": [st for st in AdvisoryStatus if st is not AdvisoryStatus.NEW],
+            "ack_channels": list(AckChannel),
         }
     )
 
@@ -363,6 +367,73 @@ def change_advisory_source(
         "source_error": error,
     }
     return templates.TemplateResponse(request, "_source_field.html", context)
+
+
+# ─── Bulk edit ───────────────────────────────────────────────────────────────
+
+
+@router.post("/advisories/bulk", response_class=HTMLResponse)
+async def bulk_edit(
+    request: Request,
+    db: DbSession = Depends(db_session),
+    principal: Principal = Depends(_require_web_principal),
+) -> HTMLResponse:
+    """Set the source, or change the status, of the selected advisories.
+    Each goes through the same service as a single edit (status: the
+    mandatory-comment chokepoint). The table refreshes itself afterwards."""
+    try:
+        principal.require_role(Role.ANALYST)
+    except PermissionDeniedError:
+        raise HTTPException(status_code=403, detail="Insufficient role") from None
+    form = await request.form()
+    ids: list[uuid.UUID] = []
+    for raw in form.getlist("ids"):
+        try:
+            ids.append(uuid.UUID(str(raw)))
+        except ValueError:
+            continue
+    action = str(form.get("action") or "")
+    actor = principal.to_actor(request.client.host if request.client else None)
+    error = None
+    result = None
+    if not ids:
+        error = "Select at least one advisory."
+    elif len(ids) > svc.BULK_MAX:
+        error = f"Select at most {svc.BULK_MAX} advisories at a time."
+    elif action == "source":
+        try:
+            result = svc.bulk_change_source(
+                db, ids, source_id=uuid.UUID(str(form.get("source_id") or "")), actor=actor
+            )
+        except (ValueError, svc.InvalidSourceError):
+            error = "Choose a source."
+    elif action == "status":
+        try:
+            to_status = AdvisoryStatus(str(form.get("to_status") or ""))
+            channel_raw = str(form.get("ack_channel") or "")
+            result = svc.bulk_change_status(
+                db,
+                ids,
+                to_status=to_status,
+                comment_body=str(form.get("comment") or ""),
+                actor=actor,
+                ack_channel=AckChannel(channel_raw) if channel_raw else None,
+            )
+        except ValueError:
+            error = "Choose a status."
+        except svc.MissingCommentError:
+            error = "A comment is required for every status change — it's added to each advisory."
+        except svc.MissingAckChannelError:
+            error = "Choose how they were acknowledged."
+    else:
+        error = "Choose what to change."
+    if result is not None:
+        db.commit()  # errors above are raised before anything is written
+    context = {"bulk_error": error, "bulk": result, "bulk_action": action}
+    response = templates.TemplateResponse(request, "_bulk_result.html", context)
+    if result is not None and result.updated:
+        response.headers["HX-Trigger"] = "tracker-refresh"
+    return response
 
 
 # ─── Ivanti tickets (D-050) ──────────────────────────────────────────────────

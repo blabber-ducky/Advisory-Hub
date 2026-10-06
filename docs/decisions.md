@@ -1405,6 +1405,25 @@ types beyond what Advanced allows (`object_type`).
 
 ---
 
+## D-051 — Admin-managed sources; bulk edits go through the single-item rules
+
+**Date:** 2026-10-06 · **Status:** Accepted
+
+**Why**: asked for custom sources defined by admins and offered to analysts,
+bulk edit of source and status, adjustable column widths, and a tidier,
+grouped admin page.
+
+| Decision | Because |
+|---|---|
+| Sources are deactivated, never deleted | Advisories reference them (FK `RESTRICT`); the history must stay intact |
+| Short code 2–10 capitals/digits; UI notes reference detection needs 2–6 letters | Matches the subject/reference patterns (D-047) without forbidding longer codes for sender-only sources |
+| Bulk status = `change_status()` per advisory, each in a savepoint; invalid transitions skipped and reported | CLAUDE.md §2.2: never bypass the chokepoint; a mixed selection shouldn't fail as a whole or silently half-apply |
+| One comment for a bulk status change, written to every advisory | The mandatory-comment rule holds per advisory |
+| Column widths per browser (localStorage), not per user on the server | A display preference; no schema or API needed; survives re-renders |
+| Admin groups as `<details>` with remembered open state | Works without extra routes; summaries show state at a glance |
+
+---
+
 ## Open decisions
 
 Tracked in `CLAUDE.md` §5 until resolved. When one is answered, record it here as

@@ -1,0 +1,51 @@
+{# Sources section of /admin. Re-rendered in place by every action. #}
+<section id="admin-sources">
+  <p class="muted" style="font-size:.82rem;margin:0 0 .8rem">
+    Who sends advisories. Incoming mail is matched by <strong>sender</strong> (address or domain), then by the
+    <strong>reference prefix</strong> (<code>DOH-2026550</code> → short code <code>DOH</code>; 2 to 6 letters).
+    Active sources are offered to analysts when they set an advisory's source. Deactivating keeps existing advisories.
+  </p>
+  {% if sources_error %}<p class="error" role="alert">{{ sources_error }}</p>{% endif %}
+  {% if sources_notice %}<div class="notice" role="status" style="margin-top:0">{{ sources_notice }}</div>{% endif %}
+
+  <table class="product-table admin-users">
+    <thead><tr><th>Short code</th><th>Name</th><th>Senders</th><th>Advisories</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for source, count in source_rows %}
+    <tr{% if not source.is_active %} class="inactive"{% endif %}>
+      <td><code>{{ source.short_code }}</code></td>
+      <td>{{ source.name }}</td>
+      <td class="muted" style="font-size:.8rem">{{ (source.sender_patterns or []) | join(', ') or '—' }}</td>
+      <td>{{ count }}</td>
+      <td>{% if source.is_active %}<span class="badge badge-good">Active</span>{% else %}<span class="badge badge-neutral">Inactive</span>{% endif %}</td>
+      <td style="white-space:nowrap">
+        <details class="pw-reset">
+          <summary>Edit</summary>
+          <form class="source-edit" hx-post="/admin/sources/{{ source.id }}" hx-target="#admin-sources" hx-swap="outerHTML">
+            <input type="text" name="short_code" value="{{ source.short_code }}" aria-label="Short code" required maxlength="10">
+            <input type="text" name="name" value="{{ source.name }}" aria-label="Name" required maxlength="200">
+            <textarea name="sender_patterns" rows="2" aria-label="Senders, one per line">{{ (source.sender_patterns or []) | join('\n') }}</textarea>
+            <button type="submit">Save</button>
+          </form>
+        </details>
+        <form hx-post="/admin/sources/{{ source.id }}/active" hx-target="#admin-sources" hx-swap="outerHTML" style="display:inline;margin:0"
+              {% if source.is_active %}hx-confirm="Deactivate {{ source.short_code }}? Its advisories stay; new mail won't be matched to it and analysts can't pick it."{% endif %}>
+          <input type="hidden" name="active" value="{{ 'false' if source.is_active else 'true' }}">
+          <button type="submit" class="link">{{ 'Deactivate' if source.is_active else 'Reactivate' }}</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">No sources yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <h4 style="font-size:.88rem;margin:1.1rem 0 .5rem">Add source</h4>
+  <form class="add-user" hx-post="/admin/sources" hx-target="#admin-sources" hx-swap="outerHTML">
+    <div><label for="src-code">Short code</label><input type="text" id="src-code" name="short_code" required maxlength="10" placeholder="e.g. NCEMA" style="text-transform:uppercase"></div>
+    <div><label for="src-name">Name</label><input type="text" id="src-name" name="name" required maxlength="200" placeholder="e.g. National Emergency Crisis and Disasters Management Authority"></div>
+    <div><label for="src-senders">Senders <span class="muted" style="font-weight:400">(one per line or comma)</span></label><input type="text" id="src-senders" name="sender_patterns" placeholder="alerts@ncema.gov.ae, ncema.gov.ae"></div>
+    <div><button type="submit">Add source</button></div>
+  </form>
+</section>

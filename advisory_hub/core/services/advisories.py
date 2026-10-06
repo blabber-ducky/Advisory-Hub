@@ -816,3 +816,91 @@ def change_source(
         },
     )
     return advisory
+
+
+# ─── Bulk edits ──────────────────────────────────────────────────────────────
+
+BULK_MAX = 200
+
+
+@dataclass(slots=True)
+class BulkResult:
+    updated: list[str] = field(default_factory=list)  # references
+    skipped: list[tuple[str, str]] = field(default_factory=list)  # (reference, why)
+
+
+def _label(advisory: Advisory | None, advisory_id: uuid.UUID) -> str:
+    return (advisory.external_ref if advisory else None) or str(advisory_id)[:8]
+
+
+def _status_label(status: AdvisoryStatus) -> str:
+    return status.value.replace("_", " ").title()
+
+
+def bulk_change_status(
+    db: DbSession,
+    advisory_ids: list[uuid.UUID],
+    *,
+    to_status: AdvisoryStatus,
+    comment_body: str,
+    actor: Actor,
+    ack_channel: AckChannel | None = None,
+) -> BulkResult:
+    """``change_status()`` for each advisory — same comment, same rules. One
+    whose transition isn't allowed is skipped with the reason; the rest go
+    through (each in its own savepoint). The caller commits."""
+    if not comment_body.strip():
+        raise MissingCommentError()
+    if to_status is AdvisoryStatus.ACKNOWLEDGED and ack_channel is None:
+        raise MissingAckChannelError()
+    result = BulkResult()
+    for advisory_id in dict.fromkeys(advisory_ids[:BULK_MAX]):
+        advisory = db.get(Advisory, advisory_id)
+        label = _label(advisory, advisory_id)
+        if advisory is None:
+            result.skipped.append((label, "not found"))
+            continue
+        if advisory.status is to_status:
+            result.skipped.append((label, f"already {_status_label(to_status)}"))
+            continue
+        try:
+            with db.begin_nested():
+                change_status(
+                    db,
+                    advisory_id,
+                    to_status=to_status,
+                    comment_body=comment_body,
+                    actor=actor,
+                    ack_channel=ack_channel,
+                )
+        except InvalidStatusTransitionError as exc:
+            frm, to = _status_label(exc.from_status), _status_label(exc.to_status)
+            result.skipped.append((label, f"can't go from {frm} to {to}"))
+            continue
+        result.updated.append(label)
+    return result
+
+
+def bulk_change_source(
+    db: DbSession, advisory_ids: list[uuid.UUID], *, source_id: uuid.UUID, actor: Actor
+) -> BulkResult:
+    """``change_source()`` for each advisory. The caller commits."""
+    source = db.get(Source, source_id)
+    from .sources import UNKNOWN_SOURCE_CODE
+
+    if source is None or not source.is_active or source.short_code == UNKNOWN_SOURCE_CODE:
+        raise InvalidSourceError(source_id)
+    result = BulkResult()
+    for advisory_id in dict.fromkeys(advisory_ids[:BULK_MAX]):
+        advisory = db.get(Advisory, advisory_id)
+        label = _label(advisory, advisory_id)
+        if advisory is None:
+            result.skipped.append((label, "not found"))
+            continue
+        if advisory.source_id == source.id and advisory.source_method is SourceMethod.MANUAL:
+            result.skipped.append((label, f"already {source.short_code}"))
+            continue
+        with db.begin_nested():
+            change_source(db, advisory_id, source_id=source.id, actor=actor)
+        result.updated.append(label)
+    return result

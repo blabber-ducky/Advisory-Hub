@@ -31,10 +31,10 @@
     </button>
     <span class="muted" style="font-size:.8rem;margin-left:.5rem">Free-tier rate limit respected — checks are queued, not immediate.</span>
   </div>
-  <table class="tracker">
+  <table class="tracker" data-resizable="iocs">
     <thead>
       <tr>
-        <th><input type="checkbox" onclick="ahToggleAllIocs(this)"></th>
+        <th class="col-select" data-no-resize><input type="checkbox" onclick="ahToggleAllIocs(this)" aria-label="Select all"></th>
         <th>Type</th><th>Value</th><th>Advisory</th><th>Status</th><th>VirusTotal</th>
       </tr>
     </thead>

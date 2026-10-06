@@ -178,6 +178,33 @@ swaps. No Node build step, one deployable, one language.
   table (bulk VT results land asynchronously), and a CSV export
   (`/iocs/export`, honours the tab's current filters) that includes each
   indicator's cached VirusTotal result alongside its defanged value.
+- **Admin layout** (2026-10-06): four collapsible groups — **People & access**
+  (Users, Microsoft sign-in), **Email intake** (Sources, Mailbox sync),
+  **Ticketing** (Ivanti), **Enrichment** (NVD, VirusTotal). Each summary shows
+  the group's state while collapsed; a jump bar opens a group
+  (`/admin#group-intake`); which groups are open is remembered per browser.
+- **Sources** (/admin → Email intake): add a source (short code, name,
+  sender addresses/domains), edit it, deactivate/reactivate it —
+  `core.services.sources.create_source` / `update_source` /
+  `set_source_active`, ADMIN only, audited (`source.created|updated|
+  deactivated|activated`). No delete: advisories reference sources. Active
+  sources are matched on incoming mail (sender, then reference prefix — the
+  short code, 2–6 letters for that) and offered wherever an analyst sets a
+  source (detail view, upload result, bulk edit). UNKNOWN is built in.
+- **Bulk edit** (tracker, ANALYST+): tick rows (or the page with the header
+  box) → a bar offers **Set source** and **Change status** (with the
+  acknowledgement channel when needed and a comment, required, added to each).
+  `POST /advisories/bulk` → `advisories.bulk_change_source` /
+  `bulk_change_status`, which run the single-advisory services
+  (`change_source`, the `change_status` chokepoint) per advisory, each in a
+  savepoint: one whose transition isn't allowed is skipped and listed with
+  the reason, the rest go through. Up to 200 at a time. The table refreshes
+  itself (`tracker-refresh` event) with the current filters.
+- **Resizable columns**: on the tracker, IOC and Affected Software tables
+  (`<table data-resizable="…">`) drag a header's right edge; widths are
+  stored per browser (localStorage, per table) and re-applied after every
+  htmx swap; double-click an edge to reset. A widened table scrolls
+  sideways.
 - **Admin** (`/admin`, ADMIN role only): **Microsoft 365** — one card each
   for Microsoft sign-in and mailbox sync (tenant/client IDs, write-only
   secret, Test, Enable; mailbox sync also mailbox, folder, interval, Sync

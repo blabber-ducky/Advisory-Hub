@@ -302,6 +302,71 @@
     .entra-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); gap: .6rem .8rem; align-items: end; }
     .entra-form .entra-actions { grid-column: 1 / -1; }
     .entra-form input { font-size: .88rem; }
+    /* ─── Tables: resizable columns, bulk selection ────────────────────── */
+    .table-scroll { overflow-x: auto; }
+    table[data-resizable] th { position: relative; }
+    table.cols-fixed { table-layout: fixed; }
+    /* User-set widths win: drop the default caps (e.g. .col-title max-width),
+       which Chrome otherwise half-applies and redistributes. */
+    table.cols-fixed td, table.cols-fixed th { overflow: hidden; text-overflow: ellipsis; max-width: none; }
+    .col-resizer {
+      position: absolute; top: 0; right: -4px; width: 9px; height: 100%; cursor: col-resize;
+      z-index: 1; touch-action: none;
+    }
+    .col-resizer::after {
+      content: ""; position: absolute; top: 25%; bottom: 25%; left: 4px; width: 1px; background: var(--border);
+    }
+    .col-resizer:hover::after, .col-resizing .col-resizer::after { background: var(--brand); width: 2px; }
+    .col-resizing { cursor: col-resize; user-select: none; }
+    table.tracker th.col-select, table.tracker td.col-select {
+      width: 2.4rem; padding-left: .3rem; padding-right: .3rem; text-align: center;
+      cursor: default; text-overflow: clip;
+    }
+    tr.advisory-row.selected td { background: color-mix(in srgb, var(--brand) 10%, transparent); }
+    .bulk-bar {
+      display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: center; margin: 0 0 .8rem;
+      padding: .6rem .8rem; border: 1px solid var(--brand); border-radius: 10px;
+      background: color-mix(in srgb, var(--brand) 6%, var(--surface));
+      position: sticky; top: .5rem; z-index: 2;
+    }
+    .bulk-bar[hidden] { display: none; }
+    .bulk-count { font-size: .9rem; }
+    .bulk-group { display: inline-flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
+    .bulk-bar select, .bulk-bar input[type=text] {
+      box-sizing: border-box; height: var(--control-h); padding: 0 .55rem; border: 1px solid var(--border);
+      border-radius: 6px; background: var(--bg); color: var(--ink); font-size: .85rem; font-family: inherit;
+    }
+    .bulk-bar input[type=text] { width: 18rem; }
+    .bulk-bar select { max-width: 16rem; }
+    .bulk-skipped { margin: .3rem 0 0; padding-left: 1.2rem; font-size: .85rem; }
+    /* ─── Admin layout: collapsible groups ─────────────────────────────── */
+    .admin-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .6rem; margin-bottom: 1rem; }
+    .admin-jump { display: flex; flex-wrap: wrap; gap: .9rem; align-items: center; font-size: .85rem; }
+    .admin-jump a { text-decoration: none; }
+    .admin-jump a:hover { text-decoration: underline; }
+    .admin-group { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); margin-bottom: 1rem; }
+    .admin-group > summary {
+      list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+      gap: 1rem; padding: .9rem 1.2rem; border-radius: 12px;
+    }
+    .admin-group > summary::-webkit-details-marker { display: none; }
+    .admin-group > summary::before {
+      content: ""; width: .5rem; height: .5rem; flex: none; margin-right: -.4rem;
+      border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+      transform: rotate(-45deg); transition: transform .15s;
+    }
+    .admin-group[open] > summary::before { transform: rotate(45deg); }
+    .admin-group > summary:hover { background: color-mix(in srgb, var(--brand) 5%, transparent); }
+    .admin-group > summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+    .group-title { font-weight: 650; color: var(--heading); font-size: 1rem; margin-right: auto; }
+    .group-meta { display: inline-flex; flex-wrap: wrap; gap: .35rem; align-items: center; font-size: .8rem; color: var(--muted); }
+    .group-body { padding: 0 1.2rem 1rem; }
+    .group-body > .card, .group-body > section.card { background: var(--bg); }
+    .source-edit { display: grid; grid-template-columns: 6rem 1fr; gap: .4rem; margin-top: .4rem; min-width: 26rem; }
+    .source-edit input, .source-edit textarea { box-sizing: border-box; padding: .3rem .5rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--ink); font: inherit; font-size: .85rem; }
+    .source-edit textarea, .source-edit button { grid-column: 1 / -1; }
+    .source-edit button { justify-self: start; }
+    #src-code::placeholder { text-transform: none; }
     /* ─── Ivanti tickets ───────────────────────────────────────────────── */
     .ticket-row { padding: .45rem 0; border-bottom: 1px solid var(--border); font-size: .87rem; }
     .ticket-row:last-of-type { border-bottom: 0; }
@@ -387,6 +452,74 @@
 <div class="theme-float">{{ theme_toggle() }}</div>
 {% endif %}
 <main>{% block content %}{% endblock %}</main>
+<script>
+  // Resizable columns for any <table data-resizable="name">: drag a header's
+  // right edge; widths are remembered per browser (localStorage, per table);
+  // double-click an edge to reset that table. Re-applied after htmx swaps.
+  (function () {
+    function key(t) { return "ah-cols-" + t.dataset.resizable; }
+    function load(t) { try { return JSON.parse(localStorage.getItem(key(t)) || "null"); } catch (e) { return null; } }
+    function save(t, widths) { try { localStorage.setItem(key(t), JSON.stringify(widths)); } catch (e) {} }
+    function headers(t) { return t.tHead ? Array.prototype.slice.call(t.tHead.rows[0].cells) : []; }
+    function freeze(t) {
+      if (t.classList.contains("cols-fixed")) return;
+      headers(t).forEach(function (th) { th.style.width = th.offsetWidth + "px"; });
+      t.classList.add("cols-fixed");
+      fit(t);
+    }
+    function fit(t) {
+      var total = headers(t).reduce(function (n, th) { return n + (parseFloat(th.style.width) || th.offsetWidth); }, 0);
+      t.style.width = Math.max(total, t.parentElement.clientWidth) + "px";
+    }
+    function apply(t, widths) {
+      headers(t).forEach(function (th, i) { if (widths[i]) th.style.width = widths[i] + "px"; });
+      t.classList.add("cols-fixed");
+      headers(t).forEach(function (th) { if (!th.style.width) th.style.width = th.offsetWidth + "px"; });
+      fit(t);
+    }
+    function reset(t) {
+      try { localStorage.removeItem(key(t)); } catch (e) {}
+      t.classList.remove("cols-fixed"); t.style.width = "";
+      headers(t).forEach(function (th) { th.style.width = ""; });
+    }
+    function init(t) {
+      if (t.dataset.resizeReady) return;
+      t.dataset.resizeReady = "1";
+      if (!t.parentElement.classList.contains("table-scroll")) {
+        var wrap = document.createElement("div"); wrap.className = "table-scroll";
+        t.parentElement.insertBefore(wrap, t); wrap.appendChild(t);
+      }
+      var saved = load(t);
+      if (saved) apply(t, saved);
+      headers(t).forEach(function (th, i) {
+        if (th.hasAttribute("data-no-resize")) return;
+        var grip = document.createElement("span");
+        grip.className = "col-resizer"; grip.title = "Drag to resize · double-click to reset";
+        grip.addEventListener("click", function (e) { e.stopPropagation(); });
+        grip.addEventListener("dblclick", function (e) { e.stopPropagation(); reset(t); });
+        grip.addEventListener("pointerdown", function (e) {
+          e.preventDefault(); e.stopPropagation();
+          freeze(t);
+          var startX = e.clientX, startW = th.offsetWidth;
+          document.body.classList.add("col-resizing");
+          grip.setPointerCapture(e.pointerId);
+          function move(ev) { th.style.width = Math.max(48, startW + ev.clientX - startX) + "px"; fit(t); }
+          function up() {
+            grip.removeEventListener("pointermove", move); grip.removeEventListener("pointerup", up);
+            document.body.classList.remove("col-resizing");
+            save(t, headers(t).map(function (h) { return Math.round(parseFloat(h.style.width) || h.offsetWidth); }));
+          }
+          grip.addEventListener("pointermove", move); grip.addEventListener("pointerup", up);
+        });
+        th.appendChild(grip);
+      });
+    }
+    function scan() { document.querySelectorAll("table[data-resizable]").forEach(init); }
+    document.addEventListener("DOMContentLoaded", scan);
+    document.addEventListener("htmx:afterSettle", scan);
+    scan();
+  })();
+</script>
 <script>
   // System → Light → Dark → System. Stored per browser; nothing server-side.
   (function () {

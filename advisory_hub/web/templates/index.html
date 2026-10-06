@@ -82,5 +82,65 @@
   {% if not filters.is_empty() or sort != default_sort %}<a class="clear-link" href="/">Clear</a>{% endif %}
 </form>
 
+{% if can_bulk %}
+{# Row checkboxes live in the table (form="bulk-form"), so the table can be
+   re-rendered without losing this bar. Hidden until something is selected. #}
+<form id="bulk-form" class="bulk-bar" hidden hx-post="/advisories/bulk" hx-target="#bulk-result"
+      hx-indicator="#bulk-indicator">
+  <span class="bulk-count" aria-live="polite"><strong data-bulk-count>0</strong> selected</span>
+  <div class="bulk-group">
+    <select name="source_id" aria-label="New source">
+      <option value="">Set source…</option>
+      {% for src in bulk_sources %}<option value="{{ src.id }}">{{ src.short_code }} — {{ src.name }}</option>{% endfor %}
+    </select>
+    <button type="submit" name="action" value="source" class="secondary">Apply</button>
+  </div>
+  <div class="bulk-group">
+    <select name="to_status" aria-label="New status" onchange="document.getElementById('bulk-ack').hidden = this.value !== 'ACKNOWLEDGED'">
+      <option value="">Change status…</option>
+      {% for st in bulk_statuses %}<option value="{{ st.value }}">{{ st.value | replace('_', ' ') | title }}</option>{% endfor %}
+    </select>
+    <select name="ack_channel" id="bulk-ack" aria-label="Acknowledged via" hidden>
+      {% for ch in ack_channels %}<option value="{{ ch.value }}">via {{ ch.value | title }}</option>{% endfor %}
+    </select>
+    <input type="text" name="comment" placeholder="Comment (required, added to each)" aria-label="Comment for the status change" maxlength="2000">
+    <button type="submit" name="action" value="status">Apply</button>
+  </div>
+  <button type="button" class="link" data-bulk-clear>Clear selection</button>
+  <span id="bulk-indicator" class="htmx-indicator muted">Working…</span>
+</form>
+<div id="bulk-result"></div>
+{% endif %}
+
 {% include "_tracker_table.html" %}
+
+{% if can_bulk %}
+<script>
+  // Bulk selection: show the bar while anything is ticked; "select all" ticks
+  // this page. Survives the table being re-rendered (filters, paging, refresh).
+  (function () {
+    var form = document.getElementById("bulk-form");
+    function boxes() { return Array.prototype.slice.call(document.querySelectorAll('input[name="ids"][form="bulk-form"]')); }
+    function sync() {
+      var all = boxes(), ticked = all.filter(function (b) { return b.checked; });
+      form.hidden = ticked.length === 0;
+      form.querySelector("[data-bulk-count]").textContent = ticked.length;
+      var head = document.querySelector("[data-bulk-all]");
+      if (head) { head.checked = all.length > 0 && ticked.length === all.length; head.indeterminate = ticked.length > 0 && ticked.length < all.length; }
+      document.querySelectorAll("tr.advisory-row").forEach(function (tr) {
+        var b = tr.querySelector('input[name="ids"]'); tr.classList.toggle("selected", !!(b && b.checked));
+      });
+    }
+    document.addEventListener("change", function (e) {
+      if (e.target.matches("[data-bulk-all]")) boxes().forEach(function (b) { b.checked = e.target.checked; });
+      if (e.target.matches('[data-bulk-all], input[name="ids"]')) sync();
+    });
+    form.querySelector("[data-bulk-clear]").addEventListener("click", function () {
+      boxes().forEach(function (b) { b.checked = false; }); sync();
+    });
+    document.body.addEventListener("htmx:afterSettle", sync);
+    sync();
+  })();
+</script>
+{% endif %}
 {% endblock %}
