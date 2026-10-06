@@ -297,6 +297,20 @@ class SystemIntegrationKind(StrEnum):
 
     NVD = "NVD"
     VIRUSTOTAL = "VIRUSTOTAL"
+    #: Microsoft Entra ID sign-in (OIDC). Authentication only — roles stay in
+    #: the app (D-049). config: tenant_id, client_id; secret: client_secret.
+    ENTRA_SSO = "ENTRA_SSO"
+    #: Read-only Graph sync of one mailbox folder into the inbox (D-049).
+    #: config: tenant_id, client_id, mailbox, folder, poll_seconds.
+    MAILBOX_SYNC = "MAILBOX_SYNC"
+
+
+#: The kinds that are "an API key + an on/off switch" (NVD, VirusTotal) — the
+#: admin panel's key cards and `resolve_credential()` handle only these.
+API_KEY_KINDS: tuple[SystemIntegrationKind, ...] = (
+    SystemIntegrationKind.NVD,
+    SystemIntegrationKind.VIRUSTOTAL,
+)
 
 
 # ─── IOC remediation tracking ──────────────────────────────────────────────────

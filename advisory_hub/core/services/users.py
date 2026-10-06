@@ -56,19 +56,27 @@ def add_user(
     password: str,
     ip_address: str | None = None,
 ) -> User:
+    """``password`` may be blank when Microsoft sign-in is enabled: the user
+    then signs in with Microsoft only, and their first sign-in links the
+    account by email (use their Entra sign-in name / UPN as the email)."""
     principal.require_role(Role.ADMIN)
     email = email.strip()
     if "@" not in email or len(email) > 320:
         raise UserAdminError("Enter a valid email address.")
     if not display_name.strip():
         raise UserAdminError("Enter a display name.")
-    _check_password(password)
+    if password:
+        _check_password(password)
+    elif not _sso_enabled(db):
+        raise UserAdminError(
+            "Set an initial password — Microsoft sign-in isn't enabled, so it's the only way in."
+        )
     try:
         return create_user(
             db,
             email=email,
             display_name=display_name,
-            password=password,
+            password=password or None,
             role=role,
             actor=principal.to_actor(ip_address),
         )
@@ -145,6 +153,11 @@ def reset_password(
 ) -> User:
     principal.require_role(Role.ADMIN)
     user = _get(db, user_id)
+    if user.external_subject is not None:
+        raise UserAdminError(
+            f"{user.display_name} signs in with Microsoft, so a password can't be used. "
+            "Unlink their Microsoft account first if they need a local password."
+        )
     _check_password(password)
     user.password_hash = hash_password(password)
     if not _is_self(principal, user):
@@ -162,7 +175,47 @@ def reset_password(
     return user
 
 
+def unlink_entra(
+    db: DbSession,
+    principal: Principal,
+    user_id: uuid.UUID,
+    *,
+    ip_address: str | None = None,
+) -> User:
+    """Detach the user from their Microsoft account — for a mis-link or an
+    Entra account that was deleted and re-created. Their next Microsoft
+    sign-in links again by email; without one they need a password reset to
+    sign in. Ends their sessions."""
+    principal.require_role(Role.ADMIN)
+    user = _get(db, user_id)
+    if user.external_subject is None:
+        return user
+    previous = user.external_subject
+    user.external_subject = None
+    if not _is_self(principal, user):
+        _end_sessions(db, user)
+    record(
+        db,
+        actor=principal.to_actor(ip_address),
+        action="user.entra_unlinked",
+        entity_type="user",
+        entity_id=user.id,
+        detail={"email": user.email, "was": previous},
+    )
+    return user
+
+
+def sso_enabled(db: DbSession) -> bool:
+    return _sso_enabled(db)
+
+
 # ─── Helpers ─────────────────────────────────────────────────────────────────
+
+
+def _sso_enabled(db: DbSession) -> bool:
+    from .entra_auth import enabled_app
+
+    return enabled_app(db) is not None
 
 
 def _get(db: DbSession, user_id: uuid.UUID) -> User:

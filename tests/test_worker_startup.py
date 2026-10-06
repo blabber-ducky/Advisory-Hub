@@ -23,6 +23,7 @@ POLLER_IMPORTS = (
     "advisory_hub.core.services.enrichment",
     "advisory_hub.core.services.inventory",
     "advisory_hub.core.services.audit",
+    "advisory_hub.core.services.mailbox_sync",
     "advisory_hub.inventory.api_client",
     "advisory_hub.db",
 )

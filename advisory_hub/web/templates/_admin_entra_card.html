@@ -1,0 +1,81 @@
+{# One Microsoft Entra app (sign-in or mailbox sync) on /admin. Every action
+   re-renders this card in place. The client secret is write-only. #}
+{% set slug = kind.value | lower %}
+{% set is_sso = kind.value == 'ENTRA_SSO' %}
+{% set missing = app.missing() %}
+<section id="entra-{{ slug }}" class="card" style="margin-bottom:1.2rem">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <h3 style="margin:0">{{ 'Microsoft sign-in (Entra ID)' if is_sso else 'Mailbox sync (Microsoft 365)' }}</h3>
+    {% if app.enabled %}<span class="badge badge-good">Enabled</span>
+    {% else %}<span class="badge badge-neutral">Disabled</span>{% endif %}
+  </div>
+  <p class="muted" style="font-size:.82rem;margin:.35rem 0 .8rem">
+    {% if is_sso %}
+    Authentication only: who may sign in and their role are set under Users, never by Entra groups.
+    Accounts linked to Microsoft can't use a password; keep one local admin without Microsoft as a break-glass account.
+    {% else %}
+    Imports new messages from one mailbox folder into the inbox, read-only — nothing in the mailbox is changed.
+    Needs its own app registration, allowed to read only this mailbox through Exchange
+    (RBAC for Applications, <code>Application Mail.Read</code> role). Don't grant <code>Mail.Read</code> in Entra — that would open every mailbox.
+    {% endif %}
+  </p>
+
+  {% if entra_error %}<p class="error" role="alert">{{ entra_error }}</p>{% endif %}
+  {% if entra_notice %}<div class="notice" role="status" style="margin-top:0">{{ entra_notice }}</div>{% endif %}
+
+  {% if is_sso %}
+  <dl class="kv" style="margin-bottom:.8rem">
+    <dt>Redirect URI</dt>
+    <dd>{% if redirect_uri %}<code>{{ redirect_uri }}</code> <span class="muted" style="font-size:.78rem">— register this as a Web redirect URI</span>
+        {% else %}<span style="color:var(--danger)">Set <code>PUBLIC_BASE_URL</code> in the environment first</span>{% endif %}</dd>
+  </dl>
+  {% elif sync_state %}
+  <dl class="kv" style="margin-bottom:.8rem">
+    <dt>Last sync</dt>
+    <dd>
+      {% if sync_state.last_sync_at %}{{ sync_state.last_sync_at.strftime('%Y-%m-%d %H:%M UTC') }}
+        {% if sync_state.last_status == 'ok' %}<span class="badge badge-good">OK</span>
+        {% else %}<span class="badge badge-critical">Error</span>{% endif %}
+      {% else %}Never{% endif %}
+    </dd>
+    {% if sync_state.last_error %}<dt>Error</dt><dd style="color:var(--danger)">{{ sync_state.last_error }}</dd>{% endif %}
+    <dt>Imported</dt><dd>{{ sync_state.fetched_total }} message(s){% if sync_state.skipped_too_large_total %}, {{ sync_state.skipped_too_large_total }} skipped as too large{% endif %}</dd>
+  </dl>
+  {% endif %}
+
+  <form class="entra-form" hx-post="/admin/entra/{{ slug }}/settings" hx-target="#entra-{{ slug }}" hx-swap="outerHTML">
+    <div><label for="{{ slug }}-tenant">Directory (tenant) ID</label>
+      <input type="text" id="{{ slug }}-tenant" name="tenant_id" value="{{ app.config.get('tenant_id', '') }}" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off"></div>
+    <div><label for="{{ slug }}-client">Application (client) ID</label>
+      <input type="text" id="{{ slug }}-client" name="client_id" value="{{ app.config.get('client_id', '') }}" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off"></div>
+    <div><label for="{{ slug }}-secret">Client secret {% if app.has_secret %}<span class="muted" style="font-weight:400">(set — blank keeps it)</span>{% endif %}</label>
+      <input type="password" id="{{ slug }}-secret" name="client_secret" autocomplete="off" placeholder="{{ 'Paste to replace' if app.has_secret else 'Paste the secret value' }}"></div>
+    {% if not is_sso %}
+    <div><label for="{{ slug }}-mailbox">Mailbox</label>
+      <input type="email" id="{{ slug }}-mailbox" name="mailbox" value="{{ app.config.get('mailbox', '') }}" placeholder="advisories@contoso.com" autocomplete="off"></div>
+    <div><label for="{{ slug }}-folder">Folder</label>
+      <input type="text" id="{{ slug }}-folder" name="folder" value="{{ app.config.get('folder', '') }}" placeholder="Inbox/Security Advisories" autocomplete="off"></div>
+    <div><label for="{{ slug }}-poll">Check every (seconds)</label>
+      <input type="number" id="{{ slug }}-poll" name="poll_seconds" min="60" value="{{ app.config.get('poll_seconds', poll_default) }}"></div>
+    {% endif %}
+    <div class="entra-actions"><button type="submit">Save</button></div>
+  </form>
+
+  <div class="button-row" style="margin-top:.8rem">
+    <form hx-post="/admin/entra/{{ slug }}/test" hx-target="#entra-{{ slug }}" hx-swap="outerHTML" style="margin:0">
+      <button type="submit" class="secondary">Test</button>
+    </form>
+    {% if not is_sso and app.enabled %}
+    <form hx-post="/admin/entra/{{ slug }}/sync-now" hx-target="#entra-{{ slug }}" hx-swap="outerHTML" style="margin:0"
+          hx-indicator="#sync-ind-{{ slug }}">
+      <button type="submit" class="secondary">Sync now <span id="sync-ind-{{ slug }}" class="htmx-indicator">&hellip;</span></button>
+    </form>
+    {% endif %}
+    <form hx-post="/admin/entra/{{ slug }}/enabled" hx-target="#entra-{{ slug }}" hx-swap="outerHTML" style="margin:0"
+          {% if app.enabled and is_sso %}hx-confirm="Turn off Microsoft sign-in? People with Microsoft-only accounts won't be able to sign in until it's back on."{% endif %}>
+      <input type="hidden" name="enabled" value="{{ 'false' if app.enabled else 'true' }}">
+      <button type="submit" {% if not app.enabled and missing %}disabled title="Missing: {{ missing | join(', ') }}"{% endif %}>{{ 'Disable' if app.enabled else 'Enable' }}</button>
+    </form>
+    {% if not app.enabled and missing %}<span class="muted" style="font-size:.8rem">To enable, set: {{ missing | join(', ') }}</span>{% endif %}
+  </div>
+</section>

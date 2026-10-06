@@ -160,7 +160,8 @@ Every variable belongs in `.env.example` with a dummy value and a comment.
 | `PDF_MAX_PAGES` | no | Default `500` |
 | `PDF_TIMEOUT_SECONDS` | no | Default `120` |
 | `OCR_ENABLED` | no | Default `false` — turn on only if scanned PDFs actually appear |
-| `OUTBOUND_ALLOWLIST` | yes (Phase 2) | Comma-separated hostnames the SSRF guard permits. For the Azure ARM and MS Graph adapters this must include **both** the API host (`management.azure.com` / `graph.microsoft.com`) **and** `login.microsoftonline.com` — the OAuth token endpoint is a separate outbound call, also SSRF-checked. |
+| `PUBLIC_BASE_URL` | for Microsoft sign-in | The address people reach the app at, e.g. `https://advisoryhub.example.com`. The Entra redirect URI is `<PUBLIC_BASE_URL>/auth/entra/callback`. Set, not derived from request headers (spoofable behind a proxy). §9 |
+| `OUTBOUND_ALLOWLIST` | yes (Phase 2) | Comma-separated hostnames the SSRF guard permits. For the Azure ARM and MS Graph adapters this must include **both** the API host (`management.azure.com` / `graph.microsoft.com`) **and** `login.microsoftonline.com` — the OAuth token endpoint is a separate outbound call, also SSRF-checked. Microsoft sign-in needs `login.microsoftonline.com`; mailbox sync needs it and `graph.microsoft.com` (§9). |
 | `CSV_MAX_BYTES` | no | Default `20971520` (20 MB) — inventory CSV upload size cap |
 | `CSV_MAX_ROWS` | no | Default `200000` — inventory CSV row cap, enforced while parsing |
 | `INVENTORY_SYNC_POLL_SECONDS` | no | Default `300` — how often the worker checks active API sources for a due `schedule_cron` |
@@ -537,3 +538,88 @@ in that order, so a failed migration never takes the running version down.
 for trying the production file on a machine without pulling. Development
 (`docker compose up` with the override) builds `app`/`worker` itself and
 never pulls them.
+
+
+## 9. Microsoft 365: sign-in and mailbox sync (Entra ID)
+
+Both are optional and configured on **/admin → Microsoft 365**; nothing is
+read from Entra except who someone is (sign-in) and the one mailbox folder
+(sync). **Roles always come from /admin → Users, never from Entra groups**
+(D-049). Use **two separate app registrations**: a leaked sign-in secret must
+not be able to read mail.
+
+Prerequisites on the server: `OUTBOUND_ALLOWLIST` includes
+`login.microsoftonline.com` and `graph.microsoft.com`, and (for sign-in)
+`PUBLIC_BASE_URL` is set. Both apps' **Test** buttons check exactly this.
+
+### 9.1 Microsoft sign-in
+
+1. **Entra admin center → App registrations → New registration**:
+   name `Advisory Hub sign-in`, *Accounts in this organizational directory
+   only* (single tenant), redirect URI **Web** =
+   `<PUBLIC_BASE_URL>/auth/entra/callback` (shown on the card).
+2. **Certificates & secrets → New client secret.** Copy the *Value*.
+3. **API permissions:** the default `User.Read` (delegated) is enough —
+   the app requests only `openid profile email`. No admin consent, no
+   application permissions, **no group claims**.
+4. On /admin: Directory (tenant) ID, Application (client) ID, client secret
+   → **Save** → **Test** → **Enable**.
+5. **Users:** add each person under Users with their **Microsoft sign-in name
+   (UPN) as the email**, a role, and no password. Their first Microsoft
+   sign-in links the account (`tenant:object id`); after that the email can
+   change in Entra and it still matches. Anyone not added is refused (and the
+   refusal is audited as `auth.entra_refused`).
+6. **Keep one local admin without Microsoft** (password only) as a
+   break-glass account for when Entra is unreachable. Linked accounts can't
+   use a password.
+
+| What happens | Behaviour |
+|---|---|
+| Someone not added signs in with Microsoft | Refused; audited with their UPN/object id |
+| A deactivated user signs in | Refused, same message (no account-state leak) |
+| A linked user tries a password | "Invalid email or password" |
+| Entra account deleted and re-created (new object id) | Refused (`email_linked_to_other_entra_object`) — **Unlink Microsoft** on their row, they sign in again |
+| Sign out | Ends the app session only; not a Microsoft sign-out |
+
+### 9.2 Mailbox sync
+
+Imports every new message in one folder (e.g. `Inbox/Security Advisories`
+of a shared mailbox) into the inbox, where the normal pipeline ingests it
+(sandboxed parsing, duplicate gates D-048, archive/failed). **Read-only**:
+nothing in the mailbox is marked, moved or deleted.
+
+1. **App registration** `Advisory Hub mailbox`, single tenant, **no
+   redirect URI**. New client secret. **Do not add Mail.Read in Entra** —
+   an Entra-consented application permission is tenant-wide and would open
+   every mailbox. Note the app's *Application (client) ID* and, under
+   **Enterprise applications**, its *Object ID*.
+2. **Exchange Online PowerShell** (`Connect-ExchangeOnline` as an Exchange
+   admin) — RBAC for Applications, scoped to the one mailbox:
+
+   ```powershell
+   New-ServicePrincipal -AppId <client id> -ObjectId <enterprise app object id> -DisplayName "Advisory Hub mailbox"
+   New-ManagementScope -Name "Advisory Hub mailbox" -RecipientRestrictionFilter "PrimarySmtpAddress -eq 'advisories@contoso.com'"
+   New-ManagementRoleAssignment -App <client id> -Role "Application Mail.Read" -CustomResourceScope "Advisory Hub mailbox"
+   # Check: InScope = True for the mailbox, False for any other
+   Test-ServicePrincipalAuthorization -Identity <client id> -Resource advisories@contoso.com
+   Test-ServicePrincipalAuthorization -Identity <client id> -Resource someone.else@contoso.com
+   ```
+
+   Role assignments can take up to an hour to apply.
+3. On /admin: tenant ID, client ID, secret, mailbox, folder (`/`-separated
+   from the top: `Inbox/Security Advisories`; `Inbox`, `Archive` etc. work in
+   any mailbox language), interval (≥ 60 s, default 120) → **Save** →
+   **Test** (shows the folder's message count) → **Enable**.
+
+The worker checks the folder on that interval; **Sync now** on the card
+does it immediately and ingests. The first sync imports everything already
+in the folder. The card shows the last sync, its status/error and counts.
+
+| Situation | Behaviour |
+|---|---|
+| Message larger than `UPLOAD_MAX_BYTES` | Skipped and counted on the card; download stops at the limit |
+| Same email also arrives by file drop / upload | One advisory — duplicate gates (D-048) |
+| Folder renamed / moved | Error on the card; fix the folder setting (the position resets) |
+| Sync position expired (Graph 410) | Starts over automatically; duplicates stopped by the gates |
+| `Access denied (HTTP 403)` | Exchange role assignment missing or not yet applied — re-run the `Test-ServicePrincipalAuthorization` check |
+| Changing mailbox or folder | Sync position and counters reset |

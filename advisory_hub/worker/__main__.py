@@ -57,6 +57,7 @@ def main() -> int:
     _start_enrichment_poller()
     _start_inventory_sync_poller()
     _start_status_export_poller()
+    _start_mailbox_poller()
 
     worker = Worker(queues, connection=connection)
     worker.work(with_scheduler=True)
@@ -75,7 +76,13 @@ def _preload_poller_dependencies() -> None:
     import croniter  # noqa: F401
 
     from ..core.models import base, enums  # noqa: F401
-    from ..core.services import audit, enrichment, inventory, status_export  # noqa: F401
+    from ..core.services import (  # noqa: F401
+        audit,
+        enrichment,
+        inventory,
+        mailbox_sync,
+        status_export,
+    )
     from ..db import session_scope  # noqa: F401
     from ..ingest import pipeline  # noqa: F401
     from ..inventory import api_client  # noqa: F401
@@ -105,6 +112,34 @@ def _start_inbox_poller() -> None:
             time.sleep(settings.inbox_poll_seconds)
 
     thread = threading.Thread(target=_loop, name="inbox-poller", daemon=True)
+    thread.start()
+
+
+def _start_mailbox_poller() -> None:
+    """Sync the configured mailbox folder into the inbox (D-049).
+
+    A no-op cycle while mailbox sync is off, so it's safe to always start;
+    turning it on in /admin takes effect on the next cycle. The interval is
+    re-read each cycle. Deposited messages are picked up by the inbox poller.
+    """
+    import threading
+    import time
+
+    def _loop() -> None:
+        while True:
+            interval = 120
+            try:
+                from ..core.services import mailbox_sync
+                from ..db import session_scope
+
+                with session_scope() as db:
+                    interval = mailbox_sync.poll_seconds(db)
+                    mailbox_sync.run_sync(db)
+            except Exception:
+                log.exception("mailbox.poll_failed")
+            time.sleep(interval)
+
+    thread = threading.Thread(target=_loop, name="mailbox-poller", daemon=True)
     thread.start()
 
 

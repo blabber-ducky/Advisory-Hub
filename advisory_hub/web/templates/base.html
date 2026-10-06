@@ -298,6 +298,22 @@
     .pw-reset input { width: 14rem; }
     .add-user { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .6rem; align-items: end; }
     .add-user input, .add-user select { width: 100%; }
+    /* ─── Admin: Entra cards ───────────────────────────────────────────── */
+    .entra-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); gap: .6rem .8rem; align-items: end; }
+    .entra-form .entra-actions { grid-column: 1 / -1; }
+    .entra-form input { font-size: .88rem; }
+    /* ─── Sign-in ──────────────────────────────────────────────────────── */
+    .sso-button {
+      box-sizing: border-box; display: flex; align-items: center; justify-content: center;
+      gap: .55rem; width: 100%; height: var(--control-h); border-radius: 7px;
+      border: 1px solid var(--border); background: var(--surface); color: var(--heading);
+      font-size: .875rem; font-weight: 600; text-decoration: none;
+    }
+    .sso-button:hover { border-color: var(--brand); color: var(--heading); }
+    .sso-button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+    .or-divider { display: flex; align-items: center; gap: .6rem; margin: 1.1rem 0;
+      color: var(--muted); font-size: .78rem; }
+    .or-divider::before, .or-divider::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
     /* ─── Advisory source ───────────────────────────────────────────────── */
     .source-field { display: inline-flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
     .source-how { font-size: .78rem; }

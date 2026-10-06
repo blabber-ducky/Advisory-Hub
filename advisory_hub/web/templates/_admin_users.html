@@ -9,12 +9,18 @@
     Admin: also manage users and integrations. Role changes apply on the user's next click.
   </p>
 
+  {% if sso_enabled %}
+  <p class="muted" style="font-size:.82rem;margin:-.5rem 0 .9rem">
+    Microsoft sign-in is on. Add people with their Microsoft sign-in name (UPN) as the email;
+    their first Microsoft sign-in links the account. Roles are always set here, never by Entra groups.
+  </p>
+  {% endif %}
   {% if users_error %}<p class="error" role="alert">{{ users_error }}</p>{% endif %}
   {% if users_notice %}<div class="notice" role="status" style="margin-top:0">{{ users_notice }}</div>{% endif %}
 
   <table class="product-table admin-users">
     <thead>
-      <tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last sign-in</th><th></th></tr>
+      <tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Sign-in</th><th>Last sign-in</th><th></th></tr>
     </thead>
     <tbody>
     {% for user in users %}
@@ -39,8 +45,19 @@
         {% if user.is_active %}<span class="badge badge-good">Active</span>
         {% else %}<span class="badge badge-neutral">Deactivated</span>{% endif %}
       </td>
+      <td>
+        {% if user.external_subject %}<span title="Linked to their Microsoft account — password sign-in is off">Microsoft</span>
+        {% elif not user.password_hash %}<span class="muted" title="Links on their first Microsoft sign-in">Microsoft (not yet signed in)</span>
+        {% else %}Password{% endif %}
+      </td>
       <td class="muted">{{ user.last_login_at.strftime('%Y-%m-%d %H:%M UTC') if user.last_login_at else 'Never' }}</td>
       <td style="white-space:nowrap">
+        {% if user.external_subject %}
+        <form hx-post="/admin/users/{{ user.id }}/unlink-entra" hx-target="#admin-users" hx-swap="outerHTML" style="display:inline;margin:0 .8rem 0 0"
+              hx-confirm="Unlink {{ user.display_name }}'s Microsoft account? Their next Microsoft sign-in links it again by email.">
+          <button type="submit" class="link">Unlink Microsoft</button>
+        </form>
+        {% else %}
         <details class="pw-reset">
           <summary>Reset password</summary>
           <form hx-post="/admin/users/{{ user.id }}/password" hx-target="#admin-users" hx-swap="outerHTML">
@@ -50,6 +67,7 @@
             <button type="submit">Set</button>
           </form>
         </details>
+        {% endif %}
         {% if not is_self %}
         <form hx-post="/admin/users/{{ user.id }}/active" hx-target="#admin-users" hx-swap="outerHTML" style="display:inline;margin:0"
               {% if user.is_active %}hx-confirm="Deactivate {{ user.display_name }}? They'll be signed out and unable to sign in."{% endif %}>
@@ -73,7 +91,11 @@
         {% for r in roles %}<option value="{{ r.value }}" {{ 'selected' if r.value == 'VIEWER' else '' }}>{{ r.value | title }}</option>{% endfor %}
       </select>
     </div>
+    {% if sso_enabled %}
+    <div><label for="new-password">Password <span class="muted" style="font-weight:400">(optional)</span></label><input type="password" id="new-password" name="password" autocomplete="new-password" minlength="{{ min_password_length }}" placeholder="Blank = Microsoft sign-in only"></div>
+    {% else %}
     <div><label for="new-password">Initial password</label><input type="password" id="new-password" name="password" autocomplete="new-password" required minlength="{{ min_password_length }}" placeholder="{{ min_password_length }}+ characters"></div>
+    {% endif %}
     <div><button type="submit">Add user</button></div>
   </form>
 </section>

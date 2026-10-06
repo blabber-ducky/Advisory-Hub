@@ -5,7 +5,14 @@
   <p class="muted" style="margin:0 0 1.5rem">Security advisory tracking &amp; remediation</p>
 
   <div class="card">
-    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    {% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
+    {% if sso_enabled %}
+    <a class="sso-button" href="/auth/entra/login">
+      <svg width="16" height="16" viewBox="0 0 21 21" aria-hidden="true"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+      Sign in with Microsoft
+    </a>
+    <div class="or-divider"><span>or with a local account</span></div>
+    {% endif %}
     <form method="post" action="/login">
       <div style="margin-bottom:.9rem">
         <label for="email">Email</label>

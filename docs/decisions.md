@@ -42,6 +42,9 @@ the interface means Entra ID OIDC is a Phase 4 swap rather than a refactor. The
 **Rules out:** no-auth mode. Status changes must be attributable — that is the
 whole point of the audit trail.
 
+**Since D-049:** Entra ID sign-in is added *alongside* local accounts (not a
+swap), for authentication only; roles stay in the app.
+
 ---
 
 ## D-004 — NVD as the only enrichment source, behind a provider interface
@@ -1335,6 +1338,42 @@ into every `.msg`, so no two copies share bytes. Importing both exports made
 **Rejected**: a unique index on `message_id` — existing databases already
 hold duplicates, so the migration would fail there; and a forwarded copy
 needs the content gate anyway.
+
+---
+
+## D-049 — Microsoft Entra ID for sign-in and mailbox access only; roles stay in the app
+
+**Date:** 2026-10-06 · **Status:** Accepted (user choices) · **Extends** D-003
+
+**Why**: asked for Entra SSO while keeping local user management, and to sync
+the tool directly to a mailbox folder — Entra used only for authentication
+and mailbox access, roles tied to the application.
+
+**Decisions** (each chosen by the user from the options offered):
+
+| Question | Decision | Because |
+|---|---|---|
+| Someone signs in with Microsoft but has no account here | **Refused.** An admin adds them first (email = UPN, role); the first sign-in links it | Tightest control; nobody reaches even Viewer without an admin's decision |
+| Which accounts may use a password | **Only ones never linked to Entra** | Linked users always go through Microsoft (MFA, Conditional Access); a password-only admin remains as break-glass |
+| Mailbox access | **App-only Graph, scoped by Exchange RBAC for Applications to the one mailbox** | Doesn't depend on a person's account or token; Exchange enforces the scope. Not an Entra-consented `Mail.Read`, which is tenant-wide |
+| After import | **Leave the message untouched** (read-only) | Least privilege; position kept with a Graph delta link; duplicates are stopped by D-048 anyway |
+
+Also decided in the design:
+
+| Rule | Because |
+|---|---|
+| Roles never come from Entra (no group/role claims requested or read) | The requirement; also keeps authorisation in `core/` (CLAUDE.md §2.3) |
+| Two app registrations (sign-in, mailbox), each its own secret | A leaked sign-in secret can't read mail |
+| Single tenant: `tid` and issuer pinned | No `common` endpoint; guests from other tenants can't match |
+| Accounts link by immutable `tid:oid`; email only for the first link, and only to an unlinked account | An email/UPN can be reassigned; the object id can't. A re-created Entra account must be unlinked by an admin |
+| ID token signature-verified even though it comes straight from the token endpoint | Defence in depth; PyJWT is the one new dependency |
+| `PUBLIC_BASE_URL` configured, not derived from headers | Host headers are spoofable behind a proxy |
+| Mailbox messages are deposited into the inbox, not ingested by a second path | One parser, one set of duplicate gates, one archive — CLAUDE.md §2.2 |
+| The Graph token is only sent to `graph.microsoft.com` | Paging links come from the server; even an allowlisted other host must not get it |
+| No refresh tokens stored | Sign-in needs only the app session; mailbox sync uses client credentials |
+
+**Not done**: Microsoft sign-out on logout (local session only), certificate
+credentials instead of client secrets, more than one mailbox folder.
 
 ---
 

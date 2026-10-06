@@ -4,6 +4,9 @@
 
 {% include "_admin_users.html" %}
 
+<h2 style="font-size:1.05rem;margin:0 0 .8rem">Microsoft 365</h2>
+{% for card in entra_cards %}{% with kind=card.kind, app=card.app, redirect_uri=card.redirect_uri, sync_state=card.sync_state, poll_default=card.poll_default, entra_error=None, entra_notice=None %}{% include "_admin_entra_card.html" %}{% endwith %}{% endfor %}
+
 <h2 style="font-size:1.05rem;margin:0 0 .3rem">Integrations</h2>
 <p style="color:var(--muted);font-size:.85rem;margin:0 0 1.2rem">
   Global API integrations. Keys set here take priority over the equivalent

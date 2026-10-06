@@ -21,7 +21,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
       "fastapi>=0.115" "uvicorn[standard]>=0.32" "sqlalchemy>=2.0.36" "alembic>=1.14" \
       "psycopg[binary]>=3.2" "pydantic>=2.10" "pydantic-settings>=2.7" "argon2-cffi>=23.1" \
       "structlog>=24.4" "jinja2>=3.1" "python-multipart>=0.0.20" "itsdangerous>=2.2" \
-      "redis>=5.2" "rq>=2.0" "httpx>=0.28" "extract-msg>=0.52" "pdfplumber>=0.11"
+      "redis>=5.2" "rq>=2.0" "httpx>=0.28" "extract-msg>=0.52" "pdfplumber>=0.11" \
+      "pyjwt>=2.10,<3"
 
 COPY advisory_hub ./advisory_hub
 COPY migrations ./migrations

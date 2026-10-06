@@ -106,6 +106,11 @@ class LocalAuthProvider:
         if not user.is_active:
             raise AuthError("Invalid credentials")
 
+        # Linked to Entra: Microsoft sign-in only, so MFA / Conditional Access
+        # always apply (D-049). Same generic error — no account-state leak.
+        if user.external_subject is not None:
+            raise AuthError("Invalid credentials")
+
         if user.password_hash and needs_rehash(user.password_hash):
             user.password_hash = hash_password(secret)
 

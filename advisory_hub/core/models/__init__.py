@@ -27,7 +27,7 @@ from .inventory import (
     ScanRun,
     VendorAlias,
 )
-from .system import SystemIntegration
+from .system import MailboxSyncState, SystemIntegration
 from .user import ApiToken, AuditLog, Session, User
 
 __all__ = [
@@ -50,6 +50,7 @@ __all__ = [
     "InventorySnapshot",
     "InventorySoftware",
     "InventorySource",
+    "MailboxSyncState",
     "RelatedAdvisory",
     "ScanMatch",
     "ScanRun",

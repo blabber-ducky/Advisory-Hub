@@ -90,6 +90,11 @@ class Settings(BaseSettings):
     # ─── Web ─────────────────────────────────────────────────────────────────
     session_cookie_secure: bool = True
     session_max_age_seconds: int = 43_200
+    #: The address users reach the app at, e.g. https://advisoryhub.example —
+    #: required for Microsoft sign-in: the redirect URI registered in Entra is
+    #: <public_base_url>/auth/entra/callback. Deliberately configured, never
+    #: derived from request headers (spoofable behind a proxy). D-049.
+    public_base_url: str = ""
 
     # ─── Observability ───────────────────────────────────────────────────────
     log_level: str = "INFO"

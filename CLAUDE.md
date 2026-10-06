@@ -131,6 +131,38 @@ data/                        # all persistent data, ./data/<volume> (git- and do
 
 Newest first. Update this when work lands.
 
+### 2026-10-06 — Microsoft Entra ID sign-in + mailbox-folder sync (roles stay local)
+- **On request**: Entra SSO alongside local user management, and direct sync
+  from a mailbox folder; Entra for authentication and mailbox access only,
+  roles in the app. User chose: pre-added users only; app-only mailbox access
+  scoped by Exchange; leave messages untouched; passwords only for accounts
+  never linked. D-049; setup in operations.md §9.
+- **Sign-in**: `core/services/entra_auth.py` — auth code + PKCE, state/nonce
+  in a signed 10-min cookie, ID token RS256-verified against the tenant JWKS
+  (aud/iss/tid/nonce/exp), match `tid:oid` → link unlinked user by email →
+  refuse (audited). Routes `/auth/entra/login`, `/auth/entra/callback`;
+  "Sign in with Microsoft" on the login page (which still renders if the
+  setting can't be read — break-glass). Linked users can't password-login.
+- **Users**: password optional when SSO is on; Sign-in column; Unlink
+  Microsoft; no password reset for linked users.
+- **Mailbox sync**: `ingest/graph_mailbox.py` (Graph, read-only, token only to
+  graph.microsoft.com, streamed size cap) + `core/services/mailbox_sync.py`
+  (delta query, position in `mailbox_sync_state`, deposits MIME into the
+  inbox; 410 → start over; errors recorded, never raised) + worker poller.
+- **Admin**: Microsoft 365 cards (settings, write-only secret, Test, Enable,
+  Sync now, last sync). API-key routes now refuse the Entra kinds
+  (`API_KEY_KINDS`). New `PUBLIC_BASE_URL`; PyJWT dependency (also in the
+  Dockerfile fallback list). Migration `c1d2e3f4a5b6` (enum values,
+  `system_integration.config`, `mailbox_sync_state`; downgrade rebuilds the
+  enum).
+- **Verified**: 809 tests (29 sign-in incl. every token check and a full
+  browser round trip, 17 mailbox incl. read-only/no-token-leak/expired
+  position/real pipeline ingest); ruff/mypy clean; migration up/down/up with
+  rows, no drift. Running app: Microsoft button only when enabled, redirect to
+  the tenant's authorize URL, Microsoft-only user added, Test reports a
+  missing allowlist entry. **Not verified against a real tenant** — needs the
+  two app registrations (operations.md §9).
+
 ### 2026-10-06 — Duplicate gates on import
 - **Reported**: duplicates when importing emails. **Cause**: the only gate
   was sha256 of the file; Outlook writes per-save metadata into each `.msg`,

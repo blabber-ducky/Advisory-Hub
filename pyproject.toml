@@ -34,6 +34,9 @@ dependencies = [
     "croniter>=3.0",
     # Phase 2d — PEP 440 version comparison in the matching engine
     "packaging>=24.0",
+    # Entra ID sign-in — verifying the ID token's signature against the
+    # tenant's JWKS (RS256; uses `cryptography`, already above). D-049.
+    "pyjwt>=2.10,<3",
 ]
 
 [project.optional-dependencies]

@@ -245,10 +245,10 @@ Append-only. No update or delete grants on this table.
 |---|---|---|
 | `email` | text unique | |
 | `display_name` | text | |
-| `password_hash` | text nullable | Null once SSO-provisioned |
+| `password_hash` | text nullable | Null for a Microsoft-only account (added without a password) |
 | `role` | enum | `VIEWER`, `ANALYST`, `ADMIN` |
 | `is_active` | bool | |
-| `external_subject` | text nullable | OIDC `sub`, for the future SSO swap |
+| `external_subject` | text nullable unique | `<tenant id>:<object id>` once linked to Microsoft Entra on first Microsoft sign-in (D-049). Set ⇒ password sign-in refused. Cleared by "Unlink Microsoft" on /admin |
 
 | `api_token` | Type | Notes |
 |---|---|---|
@@ -289,19 +289,32 @@ Append-only. No update or delete grants on this table.
 | `last_rotated_at` | timestamptz | |
 
 ### `system_integration`
-Admin-panel-configured global integrations — NVD and VirusTotal. At most one
+Admin-panel-configured global integrations — NVD, VirusTotal, and the two
+Microsoft Entra apps (sign-in, mailbox sync; D-049). At most one
 row per `kind`; distinct from `inventory_source`, which is a user-creatable
 list. Reuses `integration_credential` for the encrypted key (see
 docs/decisions.md).
 
 | Column | Type | Notes |
 |---|---|---|
-| `kind` | enum | `NVD`, `VIRUSTOTAL` |
+| `kind` | enum | `NVD`, `VIRUSTOTAL` (API key + switch), `ENTRA_SSO`, `MAILBOX_SYNC` (Entra apps) |
+| `config` | jsonb | Non-secret settings of the Entra apps: `tenant_id`, `client_id`; mailbox sync also `mailbox`, `folder`, `poll_seconds`. `{}` for NVD/VirusTotal |
 | `enabled` | bool | Explicitly disabling here overrides the equivalent env var — see `core.services.system_integrations.resolve_credential()` |
-| `credential_id` | fk → integration_credential, nullable | Absent means "fall back to the env var" |
+| `credential_id` | fk → integration_credential, nullable | NVD/VirusTotal: absent means "fall back to the env var". Entra apps: the encrypted client secret (no env fallback) |
 | `updated_by_id` | fk → user nullable | |
 
 Unique on `kind`.
+
+### `mailbox_sync_state`
+Where mailbox sync has got to (D-049) — one row.
+
+| Column | Type | Notes |
+|---|---|---|
+| `target` | text | `<mailbox>|<folder>` this state belongs to; a settings change resets the row |
+| `folder_id` | text nullable | Graph folder id, resolved from the folder path; re-resolved if the folder disappears |
+| `delta_link` | text nullable | Graph `@odata.deltaLink`: the next cycle lists only new messages. Null → list the folder from the start (re-imports are stopped by the duplicate gates, D-048) |
+| `last_sync_at` / `last_status` / `last_error` | | Shown on /admin |
+| `fetched_total` / `skipped_too_large_total` | int | Since the last reset |
 
 ### `inventory_snapshot`
 Each sync or CSV upload creates one. Snapshots are immutable; scans always run

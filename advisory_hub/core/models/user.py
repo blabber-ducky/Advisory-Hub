@@ -23,7 +23,8 @@ class User(Base, UUIDPrimaryKey, TimestampMixin):
     password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     role: Mapped[Role] = enum_column(Role, nullable=False, default=Role.VIEWER)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    #: OIDC `sub`, reserved for the Phase 4 Entra ID swap.
+    #: "<tenant id>:<object id>" once linked to a Microsoft Entra account
+    #: (D-049). Linked accounts sign in with Microsoft only — no password.
     external_subject: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

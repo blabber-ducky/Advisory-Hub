@@ -27,7 +27,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session as DbSession
 
 from ..api.deps import current_principal, db_session
-from ..core.models.enums import Role, SystemIntegrationKind
+from ..core.models.enums import API_KEY_KINDS, Role, SystemIntegrationKind
 from ..core.services import system_integrations as svc
 from ..core.services import users as users_svc
 from ..core.services.auth import PermissionDeniedError, Principal
@@ -57,15 +57,23 @@ def index(
         "title": "Admin",
         "active_nav": "admin",
         "integrations": _integration_rows(db),
+        "entra_cards": [_entra_context(db, kind) for kind in svc.ENTRA_KINDS],
         **_users_context(db, principal),
     }
     return templates.TemplateResponse(request, "admin_index.html", context)
 
 
+def _require_api_key_kind(kind: SystemIntegrationKind) -> None:
+    """The key/toggle routes are for NVD and VirusTotal only; the Entra apps
+    have their own settings routes and rules."""
+    if kind not in API_KEY_KINDS:
+        raise HTTPException(status_code=404, detail="Not an API-key integration")
+
+
 def _integration_rows(db: DbSession) -> list[dict[str, object]]:
     rows = svc.list_integrations(db)
     out: list[dict[str, object]] = []
-    for kind in SystemIntegrationKind:
+    for kind in API_KEY_KINDS:
         row: dict[str, object] = {
             "kind": kind,
             "row": rows[kind],
@@ -83,6 +91,7 @@ def set_api_key(
     db: DbSession = Depends(db_session),
     principal: Principal = Depends(_require_web_principal),
 ) -> Response:
+    _require_api_key_kind(kind)
     try:
         principal.require_role(Role.ADMIN)
         svc.set_api_key(
@@ -112,6 +121,7 @@ def toggle_enabled(
     db: DbSession = Depends(db_session),
     principal: Principal = Depends(_require_web_principal),
 ) -> Response:
+    _require_api_key_kind(kind)
     try:
         principal.require_role(Role.ADMIN)
         current = svc.get_integration(db, kind)
@@ -147,6 +157,7 @@ def _users_context(
         "users": users_svc.list_users(db, principal),
         "roles": list(Role),
         "min_password_length": users_svc.MIN_PASSWORD_LENGTH,
+        "sso_enabled": users_svc.sso_enabled(db),
         "users_error": error,
         "users_notice": notice,
     }
@@ -247,3 +258,190 @@ def reset_password(
         return f"Password reset for {user.display_name}."
 
     return _users_action(request, db, principal, action)
+
+
+@router.post("/admin/users/{user_id}/unlink-entra", response_class=HTMLResponse)
+def unlink_entra(
+    user_id: uuid.UUID,
+    request: Request,
+    db: DbSession = Depends(db_session),
+    principal: Principal = Depends(_require_web_principal),
+) -> HTMLResponse:
+    def action(ip: str | None) -> str:
+        user = users_svc.unlink_entra(db, principal, user_id, ip_address=ip)
+        return f"Unlinked {user.display_name}'s Microsoft account."
+
+    return _users_action(request, db, principal, action)
+
+
+# ─── Microsoft Entra apps: sign-in and mailbox sync (D-049) ──────────────────
+
+
+def _entra_kind(slug: str) -> SystemIntegrationKind:
+    try:
+        kind = SystemIntegrationKind(slug.upper())
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Unknown integration") from None
+    if kind not in svc.ENTRA_KINDS:
+        raise HTTPException(status_code=404, detail="Unknown integration")
+    return kind
+
+
+def _entra_context(
+    db: DbSession,
+    kind: SystemIntegrationKind,
+    *,
+    error: str | None = None,
+    notice: str | None = None,
+) -> dict[str, object]:
+    from ..config import settings
+    from ..core.services import entra_auth, mailbox_sync
+
+    return {
+        "kind": kind,
+        "app": svc.entra_app(db, kind),
+        "redirect_uri": entra_auth.redirect_uri() if settings.public_base_url else None,
+        "sync_state": mailbox_sync.state(db)
+        if kind is SystemIntegrationKind.MAILBOX_SYNC
+        else None,
+        "poll_default": svc.MAILBOX_POLL_DEFAULT,
+        "entra_error": error,
+        "entra_notice": notice,
+    }
+
+
+def _entra_action(
+    request: Request,
+    db: DbSession,
+    principal: Principal,
+    kind: SystemIntegrationKind,
+    action: Callable[[], str],
+) -> HTMLResponse:
+    """ADMIN only; run ``action`` in a savepoint, commit, re-render the card."""
+    try:
+        principal.require_role(Role.ADMIN)
+    except PermissionDeniedError:
+        raise HTTPException(status_code=403, detail="Insufficient role") from None
+    try:
+        with db.begin_nested():
+            notice = action()
+    except svc.EntraSettingsError as exc:
+        context = _entra_context(db, kind, error=str(exc))
+        return templates.TemplateResponse(request, "_admin_entra_card.html", context)
+    db.commit()
+    context = _entra_context(db, kind, notice=notice)
+    return templates.TemplateResponse(request, "_admin_entra_card.html", context)
+
+
+@router.post("/admin/entra/{slug}/settings", response_class=HTMLResponse)
+def save_entra_settings(
+    slug: str,
+    request: Request,
+    tenant_id: str = Form(""),
+    client_id: str = Form(""),
+    client_secret: str = Form(""),
+    mailbox: str = Form(""),
+    folder: str = Form(""),
+    poll_seconds: str = Form(""),
+    db: DbSession = Depends(db_session),
+    principal: Principal = Depends(_require_web_principal),
+) -> HTMLResponse:
+    kind = _entra_kind(slug)
+
+    def action() -> str:
+        svc.save_entra_settings(
+            db,
+            kind,
+            config={
+                "tenant_id": tenant_id,
+                "client_id": client_id,
+                "mailbox": mailbox,
+                "folder": folder,
+                "poll_seconds": poll_seconds,
+            },
+            client_secret=client_secret,
+            actor=principal.to_actor(request.client.host if request.client else None),
+        )
+        return "Saved."
+
+    return _entra_action(request, db, principal, kind, action)
+
+
+@router.post("/admin/entra/{slug}/enabled", response_class=HTMLResponse)
+def set_entra_enabled(
+    slug: str,
+    request: Request,
+    enabled: bool = Form(...),
+    db: DbSession = Depends(db_session),
+    principal: Principal = Depends(_require_web_principal),
+) -> HTMLResponse:
+    kind = _entra_kind(slug)
+
+    def action() -> str:
+        svc.set_entra_enabled(
+            db,
+            kind,
+            enabled=enabled,
+            actor=principal.to_actor(request.client.host if request.client else None),
+        )
+        return "Enabled." if enabled else "Disabled."
+
+    return _entra_action(request, db, principal, kind, action)
+
+
+@router.post("/admin/entra/{slug}/test", response_class=HTMLResponse)
+def test_entra(
+    slug: str,
+    request: Request,
+    db: DbSession = Depends(db_session),
+    principal: Principal = Depends(_require_web_principal),
+) -> HTMLResponse:
+    from ..core.services import entra_auth, mailbox_sync
+
+    kind = _entra_kind(slug)
+
+    def action() -> str:
+        if kind is SystemIntegrationKind.MAILBOX_SYNC:
+            ok, message = mailbox_sync.check_connection(db)
+        else:
+            app = svc.entra_app(db, kind)
+            if not app.tenant_id:
+                raise svc.EntraSettingsError("Set the tenant ID first.")
+            ok, message = entra_auth.check_configuration(app)
+        if not ok:
+            raise svc.EntraSettingsError(message)
+        return message
+
+    return _entra_action(request, db, principal, kind, action)
+
+
+@router.post("/admin/entra/mailbox_sync/sync-now", response_class=HTMLResponse)
+def mailbox_sync_now(
+    request: Request,
+    db: DbSession = Depends(db_session),
+    principal: Principal = Depends(_require_web_principal),
+) -> HTMLResponse:
+    """Sync now, then ingest what arrived — like "Scan inbox now"."""
+    from ..core.services import mailbox_sync
+    from ..ingest.pipeline import process_inbox
+
+    try:
+        principal.require_role(Role.ADMIN)
+    except PermissionDeniedError:
+        raise HTTPException(status_code=403, detail="Insufficient role") from None
+    report = mailbox_sync.run_sync(db)
+    db.commit()  # the state row records the outcome either way
+    kind = SystemIntegrationKind.MAILBOX_SYNC
+    if report.status != "ok":
+        context = _entra_context(db, kind, error=report.message)
+        return templates.TemplateResponse(request, "_admin_entra_card.html", context)
+    notice = report.message + "."
+    if report.fetched:
+        outcomes = process_inbox()
+        n = {s: sum(o.status == s for o in outcomes) for s in ("INGESTED", "DUPLICATE", "FAILED")}
+        notice += (
+            f" Processed: {n['INGESTED']} ingested, {n['DUPLICATE']} duplicate(s), "
+            f"{n['FAILED']} failed."
+        )
+    context = _entra_context(db, kind, notice=notice)
+    return templates.TemplateResponse(request, "_admin_entra_card.html", context)

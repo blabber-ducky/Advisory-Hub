@@ -141,6 +141,14 @@ swaps. No Node build step, one deployable, one language.
   primary one — Refresh, Scan inbox now, Test connection, Deactivate.
   `button.link` is for text actions (Sign out, Deactivate a user).
   Inputs/selects that sit beside buttons use the same height.
+- **Mailbox sync** (D-049): a worker poller (`mailbox_sync.run_sync`, every
+  `poll_seconds`) reads one mailbox folder through Microsoft Graph, app-only
+  and read-only (Exchange RBAC for Applications scopes the app to that
+  mailbox). New messages (Graph delta query; position in
+  `mailbox_sync_state`) are downloaded as MIME and **deposited into the
+  inbox** — from there it's the normal pipeline. The token is only ever sent
+  to `graph.microsoft.com`; messages over `UPLOAD_MAX_BYTES` are skipped and
+  counted.
 - **Import manual tracker** (`/tracker-import`, ANALYST+, linked from the
   tracker page): upload the team's spreadsheet tracker (`.xlsx`) or the CSV
   converted from it, preview, then apply — statuses and comments brought
@@ -160,7 +168,10 @@ swaps. No Node build step, one deployable, one language.
   table (bulk VT results land asynchronously), and a CSV export
   (`/iocs/export`, honours the tab's current filters) that includes each
   indicator's cached VirusTotal result alongside its defanged value.
-- **Admin** (`/admin`, ADMIN role only): **Users** — list every account
+- **Admin** (`/admin`, ADMIN role only): **Microsoft 365** — one card each
+  for Microsoft sign-in and mailbox sync (tenant/client IDs, write-only
+  secret, Test, Enable; mailbox sync also mailbox, folder, interval, Sync
+  now, last sync status) — D-049, operations.md §9. **Users** — list every account
   (role, active/deactivated, last sign-in), add a user with an initial
   password, change a role inline, deactivate/reactivate, reset a password —
   all rules in `core.services.users`, see §6 and D-046. Below it,
@@ -495,8 +506,25 @@ open count.
 
 ## 6. Authentication and authorisation
 
-Local username/password with Argon2id, behind an `AuthProvider` interface so
-Entra ID OIDC drops in later without touching call sites.
+Local username/password with Argon2id, plus optional **Microsoft Entra ID
+sign-in** (OIDC authorization code + PKCE, single tenant) — D-049. Entra
+proves *who* someone is; *whether* they may sign in and their role come only
+from the local `user_account` row. No group or role claim is requested or
+read.
+
+| Account | Signs in with |
+|---|---|
+| Added with a password, never linked | Password (e.g. the break-glass admin) |
+| Added without a password (Microsoft sign-in on) | Microsoft; the first sign-in links it by email = UPN |
+| Linked (`external_subject = tenant:oid`) | Microsoft only — password refused, so MFA / Conditional Access always apply |
+
+`core.services.entra_auth` holds every rule: state + nonce + PKCE carried in
+a 10-minute signed cookie; code exchanged at the tenant's token endpoint; ID
+token signature-verified (RS256, tenant JWKS, cached 1 h, one refetch on an
+unknown `kid`) with `aud`, `iss`, `tid`, `nonce`, `exp` checked; match by
+`tid:oid`, else link an unlinked user with the same email, else refuse.
+Every refusal is audited (`auth.entra_refused` + reason); the person sees one
+generic message. Setup: operations.md §9.
 
 | Role | Can |
 |---|---|
@@ -518,6 +546,11 @@ requires ADMIN itself):
 
 There is no delete: audit entries and comments reference the account, so it
 is deactivated instead (D-046).
+
+With Microsoft sign-in on: the password is optional when adding a user
+(blank = Microsoft only); a **Sign-in** column shows Password / Microsoft /
+Microsoft (not yet signed in); **Unlink Microsoft** (`user.entra_unlinked`,
+ends their sessions) replaces Reset password for linked users.
 
 API tokens are scoped (`advisories:read`, `advisories:write`, `inventory:read`,
 `scan:run`, `stats:read`), hashed at rest (only the prefix is stored in clear for

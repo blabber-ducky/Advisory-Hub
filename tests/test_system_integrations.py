@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from cryptography.fernet import Fernet
 
-from advisory_hub.core.models.enums import ActorKind, SystemIntegrationKind
+from advisory_hub.core.models.enums import API_KEY_KINDS, ActorKind, SystemIntegrationKind
 from advisory_hub.core.services import system_integrations as svc
 from advisory_hub.core.services.audit import Actor
 
@@ -130,7 +130,7 @@ class TestSetEnabled:
 class TestListIntegrations:
     def test_returns_every_kind_even_with_no_rows(self, db) -> None:
         rows = svc.list_integrations(db)
-        assert set(rows.keys()) == set(SystemIntegrationKind)
+        assert set(rows.keys()) == set(API_KEY_KINDS)
         assert all(v is None for v in rows.values())
 
     def test_configured_kind_returns_its_row(self, db) -> None:
