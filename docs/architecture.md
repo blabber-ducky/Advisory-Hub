@@ -141,6 +141,16 @@ swaps. No Node build step, one deployable, one language.
   primary one — Refresh, Scan inbox now, Test connection, Deactivate.
   `button.link` is for text actions (Sign out, Deactivate a user).
   Inputs/selects that sit beside buttons use the same height.
+- **Ivanti tickets** (D-050): on an advisory, ANALYST+ **Create ticket**
+  opens a dialog whose Service → Category → Sub-category → Team dropdowns are
+  read live from Ivanti (`GET /advisories/{id}/tickets/options?level=…`
+  fills the next level and empties the dependent ones below it, cached 10
+  min). `POST /advisories/{id}/tickets` → `core.services.tickets.create_ticket`
+  re-checks every value against Ivanti's list for its parent, creates the
+  Service Request (`CreateObject`), attaches the PDF, stores an
+  `advisory_ticket` row and audits `advisory.ticket_created`. SOAP client:
+  `integrations/ivanti.py` (httpx + defusedxml, SSRF-checked, the key only to
+  the tenant host). Settings: /admin → Ticketing (operations.md §10).
 - **Mailbox sync** (D-049): a worker poller (`mailbox_sync.run_sync`, every
   `poll_seconds`) reads one mailbox folder through Microsoft Graph, app-only
   and read-only (Exchange RBAC for Applications scopes the app to that

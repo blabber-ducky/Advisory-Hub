@@ -303,6 +303,9 @@ class SystemIntegrationKind(StrEnum):
     #: Read-only Graph sync of one mailbox folder into the inbox (D-049).
     #: config: tenant_id, client_id, mailbox, folder, poll_seconds.
     MAILBOX_SYNC = "MAILBOX_SYNC"
+    #: Ivanti Neurons for ITSM — raise a ticket from an advisory (D-050).
+    #: config: base_url, tenant_id, levels, field names, templates; secret: api_key.
+    IVANTI_ITSM = "IVANTI_ITSM"
 
 
 #: The kinds that are "an API key + an on/off switch" (NVD, VirusTotal) — the

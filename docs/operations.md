@@ -623,3 +623,59 @@ in the folder. The card shows the last sync, its status/error and counts.
 | Sync position expired (Graph 410) | Starts over automatically; duplicates stopped by the gates |
 | `Access denied (HTTP 403)` | Exchange role assignment missing or not yet applied — re-run the `Test-ServicePrincipalAuthorization` check |
 | Changing mailbox or folder | Sync position and counters reset |
+
+
+## 10. Ivanti ITSM — raising tickets from advisories
+
+Analysts raise an Ivanti **Service Request** from an advisory: **Create
+ticket** on the advisory → a dialog with **Service → Category → Sub-category →
+Team** read live from your Ivanti (each choice narrows the next; all four
+required), plus a subject and description pre-filled from the advisory → the
+SR is created, the advisory's PDF attached, and the SR number shown on the
+advisory as a link that opens it in Ivanti. One-way: nothing is read back
+(D-050).
+
+### 10.1 Setup
+
+1. **In Ivanti**, create a **tenant API key** for an integration account
+   whose role can read Services, Categories, Sub-categories and Teams and
+   create Service Requests (Configuration → Security Controls → API Keys).
+2. **On the server**, add the tenant host (e.g.
+   `mediclinic-ae-ism.ivanticloud.com`) to `OUTBOUND_ALLOWLIST` and restart.
+   Set `PUBLIC_BASE_URL` too if you want the ticket description to link back
+   to the advisory.
+3. **/admin → Ticketing → Ivanti ITSM**: **Tenant URL** (the `https://…`
+   address only) and **API key** → **Save** → **Test** → **Enable**.
+
+**Test** is read-only. It signs in with the key, reads the Service Request's
+fields, and walks the four lists (services; categories of a service;
+sub-categories of a category; teams), reporting each. Enable stays off until
+a Test passes, and any change to where lists come from needs a new Test.
+
+### 10.2 When Test reports a problem — Advanced
+
+Your services, categories and sub-categories are custom, so where Ivanti
+keeps them can differ from the usual names filled in. Under **Advanced**,
+each list has:
+
+| Setting | Meaning | Usual value |
+|---|---|---|
+| Ticket field | Field set on the Service Request | `Service`, `Category`, `Subcategory`, `OwnerTeam` |
+| Values from | Business object the choices are read from | `CI#Service`, `Category#`, `Subcategory#`, `StandardUserTeam#` |
+| Shown field | Field of that object listed in the dropdown (and sent) | `Name`, `Name`, `Name`, `Team` |
+| Narrowed by field | Field of that object that must equal the choice above (blank = not narrowed) | —, `Service`, `Category`, — |
+
+Change only what Test reports, then Test again. Also under Advanced: record
+type (`ServiceReq#`), the number/subject/description fields, the subject and
+description templates (placeholders listed on the card), **extra fields** set
+on every ticket (`Name=Value` per line — e.g. a `ProfileLink` or `Source` your
+business rules require; Test lists required fields that nothing sets), attach
+PDFs on/off, and the ticket-link template.
+
+| Situation | Behaviour |
+|---|---|
+| Ivanti refuses the ticket (business rule, missing field) | Its reason is shown in the dialog; nothing is stored |
+| PDF over 10 MB or attaching fails | The SR is kept; the advisory shows "Partly done" with the reason |
+| Double-click / resubmit within 2 minutes | One SR — the same choices return the ticket just created |
+| A value not in Ivanti's list for its parent (e.g. a tampered form) | Refused |
+| Lists changed in Ivanti | Picked up within 10 minutes, or **Refresh lists** on the card |

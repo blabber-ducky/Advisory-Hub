@@ -1,0 +1,97 @@
+{# Ivanti ITSM integration on /admin (D-050). Re-rendered in place by every
+   action. The API key is write-only. #}
+{% set adv = ivanti.advanced %}
+{% set missing = ivanti.missing() %}
+<section id="ivanti-card" class="card" style="margin-bottom:1.2rem">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <h3 style="margin:0">Ivanti ITSM — service requests</h3>
+    {% if ivanti.enabled %}<span class="badge badge-good">Enabled</span>
+    {% else %}<span class="badge badge-neutral">Disabled</span>{% endif %}
+  </div>
+  <p class="muted" style="font-size:.82rem;margin:.35rem 0 .8rem">
+    Lets analysts raise a Service Request from an advisory, choosing Service, Category, Sub-category and Team
+    from your Ivanti lists. The ticket is linked on the advisory; nothing is synced back.
+  </p>
+
+  {% if ivanti_error %}<p class="error" role="alert">{{ ivanti_error }}</p>{% endif %}
+  {% if ivanti_notice %}<div class="notice" role="status" style="margin-top:0">{{ ivanti_notice }}</div>{% endif %}
+  {% if ivanti_report %}
+  <div class="notice" role="status" style="margin-top:0">
+    <strong>{{ 'Test passed.' if ivanti_report.ok else 'Test found problems.' }}</strong>
+    <ul class="test-steps">
+      {% for step in ivanti_report.steps %}
+      <li><span class="badge {{ 'badge-good' if step.ok else 'badge-critical' }}">{{ 'OK' if step.ok else 'Problem' }}</span>
+        <strong>{{ step.label }}</strong> — {{ step.detail }}</li>
+      {% endfor %}
+    </ul>
+    {% if not ivanti_report.ok %}<span class="muted" style="font-size:.8rem">Adjust under Advanced and Test again.</span>{% endif %}
+  </div>
+  {% elif ivanti.tested_at %}
+  <p class="muted" style="font-size:.8rem;margin:0 0 .6rem">Last successful Test: {{ ivanti.tested_at[:16].replace('T', ' ') }} UTC</p>
+  {% endif %}
+
+  <form hx-post="/admin/ivanti/settings" hx-target="#ivanti-card" hx-swap="outerHTML">
+    <div class="entra-form">
+      <div><label for="ivanti-url">Tenant URL</label>
+        <input type="url" id="ivanti-url" name="base_url" value="{{ ivanti.base_url }}" placeholder="https://yourfirm.ivanticloud.com" autocomplete="off"></div>
+      <div><label for="ivanti-key">API key {% if ivanti.has_key %}<span class="muted" style="font-weight:400">(set — blank keeps it)</span>{% endif %}</label>
+        <input type="password" id="ivanti-key" name="api_key" autocomplete="off" placeholder="{{ 'Paste to replace' if ivanti.has_key else 'Paste the tenant API key' }}"></div>
+    </div>
+
+    <details class="advanced" style="margin-top:.9rem">
+      <summary>Advanced — where the lists and fields are in Ivanti</summary>
+      <p class="muted" style="font-size:.8rem">Ivanti's usual names are filled in. <strong>Test</strong> checks each against your tenant;
+        change only what it reports. Each list: the field set on the ticket, the business object the values come from,
+        the field shown, and the field of that object that must equal the choice above it (blank = not narrowed).</p>
+      <div class="entra-form">
+        <div><label for="iv-tenant">Tenant ID</label><input type="text" id="iv-tenant" name="tenant_id" value="{{ ivanti.tenant_id }}" placeholder="defaults to the URL's host"></div>
+        <div><label for="iv-type">Record type</label><input type="text" id="iv-type" name="object_type" value="{{ adv.object_type }}"></div>
+        <div><label for="iv-num">Number field</label><input type="text" id="iv-num" name="number_field" value="{{ adv.number_field }}"></div>
+        <div><label for="iv-subj">Subject field</label><input type="text" id="iv-subj" name="subject_field" value="{{ adv.subject_field }}"></div>
+        <div><label for="iv-desc">Description field</label><input type="text" id="iv-desc" name="description_field" value="{{ adv.description_field }}"></div>
+      </div>
+
+      <table class="product-table" style="margin:.9rem 0">
+        <thead><tr><th>List</th><th>Ticket field</th><th>Values from (business object)</th><th>Shown field</th><th>Narrowed by field</th></tr></thead>
+        <tbody>
+        {% for lvl, label in ivanti_levels %}
+        {% set cfg = ivanti.levels[lvl] %}
+        <tr>
+          <td>{{ label }}</td>
+          {% for key in ('field', 'bo', 'display', 'parent') %}
+          <td><input type="text" name="level_{{ lvl }}_{{ key }}" value="{{ cfg[key] }}" aria-label="{{ label }} {{ key }}" class="level-input"></td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="ticket-field"><label for="iv-st">Subject template</label><input type="text" id="iv-st" name="subject_template" value="{{ adv.subject_template }}"></div>
+      <div class="ticket-field"><label for="iv-dt">Description template</label><textarea id="iv-dt" name="description_template" rows="7">{{ adv.description_template }}</textarea></div>
+      <p class="muted" style="font-size:.76rem;margin:.2rem 0 .7rem">Placeholders: {% for p in ivanti_placeholders %}<code>{{ '{' ~ p ~ '}' }}</code> {% endfor %}</p>
+      <div class="ticket-field"><label for="iv-extra">Extra fields set on every ticket <span class="muted" style="font-weight:400">(Name=Value per line, e.g. Source=Security Advisory)</span></label>
+        <textarea id="iv-extra" name="extra_fields" rows="3">{{ adv.extra_fields }}</textarea></div>
+      <div class="ticket-field"><label for="iv-link">Ticket link template <span class="muted" style="font-weight:400">({base} {recid} {number} {object_type_q})</span></label>
+        <input type="text" id="iv-link" name="link_template" value="{{ adv.link_template }}"></div>
+      <label style="display:flex;gap:.4rem;align-items:center;font-weight:400;margin-top:.5rem">
+        <input type="checkbox" name="attach_pdfs" {{ 'checked' if adv.attach_pdfs else '' }}> Attach the advisory's PDF to the ticket
+      </label>
+    </details>
+
+    <div class="button-row" style="margin-top:.9rem"><button type="submit">Save</button></div>
+  </form>
+
+  <div class="button-row" style="margin-top:.6rem">
+    <form hx-post="/admin/ivanti/test" hx-target="#ivanti-card" hx-swap="outerHTML" hx-indicator="#ivanti-test-ind" style="margin:0">
+      <button type="submit" class="secondary">Test <span id="ivanti-test-ind" class="htmx-indicator">&hellip;</span></button>
+    </form>
+    <form hx-post="/admin/ivanti/refresh-lists" hx-target="#ivanti-card" hx-swap="outerHTML" style="margin:0">
+      <button type="submit" class="secondary">Refresh lists</button>
+    </form>
+    <form hx-post="/admin/ivanti/enabled" hx-target="#ivanti-card" hx-swap="outerHTML" style="margin:0">
+      <input type="hidden" name="enabled" value="{{ 'false' if ivanti.enabled else 'true' }}">
+      <button type="submit" {% if not ivanti.enabled and missing %}disabled title="Missing: {{ missing | join(', ') }}"{% endif %}>{{ 'Disable' if ivanti.enabled else 'Enable' }}</button>
+    </form>
+    {% if not ivanti.enabled and missing %}<span class="muted" style="font-size:.8rem">To enable: {{ missing | join(', ') }}</span>{% endif %}
+  </div>
+</section>

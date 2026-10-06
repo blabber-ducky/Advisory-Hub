@@ -1,0 +1,4 @@
+{# Response to choosing a value: the next dropdown, filled for that choice,
+   plus every dependent dropdown below it emptied (out-of-band). #}
+{% with sel={'advisory_id': advisory_id, 'level': level, 'label': label, 'values': values, 'selected': selected, 'next_level': next_level, 'waits_for': waits_for}, oob=False, sel_error=error %}{% include "_ticket_select.html" %}{% endwith %}
+{% for reset in resets %}{% with sel=reset, oob=True, sel_error=None %}{% include "_ticket_select.html" %}{% endwith %}{% endfor %}

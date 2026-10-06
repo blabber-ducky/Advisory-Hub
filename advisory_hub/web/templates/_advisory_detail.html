@@ -148,6 +148,15 @@
 
     <div>
       {% include "_status_form.html" %}
+      {% include "_tickets_panel.html" %}
+      {% if can_create_ticket %}
+      {# Outside the panel, so refreshing the panel doesn't remove it. Closed by
+         the "ticket-created" event the create response triggers. #}
+      <dialog id="ticket-dialog" class="ticket-dialog" hx-on:ticket-created="this.close()" aria-label="Create Ivanti ticket">
+        <div id="ticket-dialog-body"></div>
+      </dialog>
+      {% endif %}
+
       {% include "_scan_panel.html" %}
 
       <div class="detail-section">

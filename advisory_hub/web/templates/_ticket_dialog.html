@@ -1,0 +1,43 @@
+{# Body of the "Create ticket" dialog, loaded into #ticket-dialog-body.
+   Re-rendered with the choices kept and the reason when Ivanti refuses. #}
+<form class="ticket-form" hx-post="/advisories/{{ advisory_id }}/tickets" hx-target="#ticket-dialog-body"
+      hx-indicator="#ticket-creating"
+      hx-on:change="ahTicketReady(this)" hx-on:htmx:after-settle="ahTicketReady(this)">
+  <div class="ticket-head">
+    <h2>Create Ivanti service request</h2>
+    <button type="button" class="link" aria-label="Close" onclick="this.closest('dialog').close()">✕</button>
+  </div>
+  <p class="muted" style="margin:0 0 .8rem;font-size:.82rem">Lists come from Ivanti. All four are required; each choice narrows the next.</p>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+
+  <div class="ticket-grid">
+    {% for sel in selects %}{% with oob=False, sel_error=None %}{% include "_ticket_select.html" %}{% endwith %}{% endfor %}
+  </div>
+
+  <div class="ticket-field" style="margin-top:.8rem">
+    <label for="ticket-subject">Subject <span class="req" aria-hidden="true">*</span></label>
+    <input type="text" id="ticket-subject" name="subject" maxlength="250" required value="{{ subject }}">
+  </div>
+  <div class="ticket-field">
+    <label for="ticket-description">Description</label>
+    <textarea id="ticket-description" name="description" rows="9">{{ description }}</textarea>
+  </div>
+
+  <div class="button-row" style="margin-top:1rem">
+    <button type="submit" disabled>Create ticket <span id="ticket-creating" class="htmx-indicator">&hellip;</span></button>
+    <button type="button" class="secondary" onclick="this.closest('dialog').close()">Cancel</button>
+    <span id="ticket-loading" class="htmx-indicator muted" style="font-size:.82rem">Loading from Ivanti…</span>
+  </div>
+</form>
+<script>
+  // Create stays disabled until all four lists have a value. (A disabled
+  // select is skipped by checkValidity(), so check them directly.)
+  function ahTicketReady(form) {
+    var ok = ["service", "category", "subcategory", "team"].every(function (n) {
+      var el = form.elements[n];
+      return el && !el.disabled && el.value;
+    });
+    form.querySelector('button[type="submit"]').disabled = !ok || !form.elements.subject.value.trim();
+  }
+  ahTicketReady(document.querySelector(".ticket-form"));
+</script>

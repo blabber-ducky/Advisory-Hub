@@ -1377,6 +1377,34 @@ credentials instead of client secrets, more than one mailbox folder.
 
 ---
 
+## D-050 — Ivanti tickets: raised by an analyst, classified from Ivanti's own lists, linked one-way
+
+**Date:** 2026-10-06 · **Status:** Accepted (user choices)
+
+**Why**: remediation is tracked in Ivanti Neurons for ITSM; asked for tickets
+for advisories via the tenant's integration service (FRSHEATIntegration
+SOAP). The user specified: a **Create ticket** button; a **Service Request**;
+a pop-up where the analyst picks **Service, Category, Sub-category and Team**
+— the firm's own lists, pulled from Ivanti, all mandatory — as on the Ivanti
+form; the ticket linked and openable from the advisory; the tenant URL and
+API key configured on /admin.
+
+| Decision | Because |
+|---|---|
+| Manual only (no automatic tickets) | User choice — an analyst decides what becomes work |
+| `CreateObject` on `ServiceReq#` with the four fields, not `SubmitRequest` against an offering | The analyst classifies it themselves, as on the agent form; offerings have their own parameters |
+| Lists read live (cached 10 min), each narrowed by the choice above; values re-checked server-side | The lists are custom and change in Ivanti; a tampered form must not send arbitrary values |
+| Where the lists live is configurable with Ivanti's usual defaults, and **Test** must pass before Enable | Tenants differ; Test pinpoints the level that's wrong instead of failing at ticket time |
+| One-way: number + link stored, nothing read back | User choice — each tool owns its workflow |
+| Tenant API key, encrypted, write-only; sent only to the configured host | User choice; CLAUDE.md §2.3 |
+| Hand-written SOAP (httpx) parsed with defusedxml, no SOAP library | Five operations; untrusted XML; no new dependency |
+| PDF attached; failure keeps the SR and shows a warning | The SR is the important part; a missing attachment is visible, not silent |
+
+**Not done**: status/comment sync either way, automatic tickets, other record
+types beyond what Advanced allows (`object_type`).
+
+---
+
 ## Open decisions
 
 Tracked in `CLAUDE.md` §5 until resolved. When one is answered, record it here as

@@ -302,6 +302,33 @@
     .entra-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); gap: .6rem .8rem; align-items: end; }
     .entra-form .entra-actions { grid-column: 1 / -1; }
     .entra-form input { font-size: .88rem; }
+    /* ─── Ivanti tickets ───────────────────────────────────────────────── */
+    .ticket-row { padding: .45rem 0; border-bottom: 1px solid var(--border); font-size: .87rem; }
+    .ticket-row:last-of-type { border-bottom: 0; }
+    .ticket-dialog {
+      width: min(44rem, calc(100vw - 2rem)); max-height: calc(100vh - 3rem); padding: 1.25rem 1.4rem;
+      border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--ink);
+      box-shadow: 0 18px 48px rgb(0 0 0 / .28);
+    }
+    .ticket-dialog::backdrop { background: rgb(10 20 40 / .45); }
+    .ticket-head { display: flex; justify-content: space-between; align-items: center; }
+    .ticket-head h2 { font-size: 1.05rem; margin: 0; }
+    .ticket-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem 1rem; }
+    @media (max-width: 640px) { .ticket-grid { grid-template-columns: 1fr; } }
+    .ticket-field { display: flex; flex-direction: column; gap: .3rem; margin-bottom: .2rem; }
+    .ticket-field label { margin: 0; }
+    .ticket-field select, .ticket-field textarea {
+      box-sizing: border-box; width: 100%; padding: 0 .6rem; border: 1px solid var(--border);
+      border-radius: 7px; background: var(--bg); color: var(--ink); font-size: .9rem; font-family: inherit;
+    }
+    .ticket-field select { height: var(--control-h); }
+    .ticket-field select:disabled { opacity: .6; }
+    .ticket-field textarea { padding: .5rem .6rem; resize: vertical; }
+    .req { color: var(--danger); }
+    .advanced summary { cursor: pointer; color: var(--accent); font-size: .88rem; font-weight: 600; }
+    .level-input { box-sizing: border-box; width: 100%; height: 2rem; padding: 0 .45rem; border: 1px solid var(--border);
+      border-radius: 6px; background: var(--bg); color: var(--ink); font-size: .82rem; }
+    .test-steps { margin: .4rem 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: .3rem; font-size: .84rem; }
     /* ─── Sign-in ──────────────────────────────────────────────────────── */
     .sso-button {
       box-sizing: border-box; display: flex; align-items: center; justify-content: center;

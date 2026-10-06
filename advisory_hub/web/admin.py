@@ -58,6 +58,7 @@ def index(
         "active_nav": "admin",
         "integrations": _integration_rows(db),
         "entra_cards": [_entra_context(db, kind) for kind in svc.ENTRA_KINDS],
+        **_ivanti_context(db),
         **_users_context(db, principal),
     }
     return templates.TemplateResponse(request, "admin_index.html", context)
@@ -445,3 +446,157 @@ def mailbox_sync_now(
         )
     context = _entra_context(db, kind, notice=notice)
     return templates.TemplateResponse(request, "_admin_entra_card.html", context)
+
+
+# ─── Ivanti ITSM (D-050) ─────────────────────────────────────────────────────
+
+
+def _ivanti_context(
+    db: DbSession,
+    *,
+    error: str | None = None,
+    notice: str | None = None,
+    report: object | None = None,
+) -> dict[str, object]:
+    from ..core.services import tickets
+
+    return {
+        "ivanti": tickets.get_settings(db),
+        "ivanti_levels": [(lvl, tickets.LEVEL_LABELS[lvl]) for lvl in tickets.LEVELS],
+        "ivanti_placeholders": tickets.PLACEHOLDERS,
+        "ivanti_error": error,
+        "ivanti_notice": notice,
+        "ivanti_report": report,
+    }
+
+
+def _ivanti_response(
+    request: Request, db: DbSession, principal: Principal, action: Callable[[], object]
+) -> HTMLResponse:
+    """ADMIN only; run ``action`` in a savepoint, commit, re-render the card.
+    ``action`` returns a notice string or a Test report."""
+    from ..core.services import tickets
+
+    try:
+        principal.require_role(Role.ADMIN)
+    except PermissionDeniedError:
+        raise HTTPException(status_code=403, detail="Insufficient role") from None
+    try:
+        with db.begin_nested():
+            outcome = action()
+    except tickets.TicketError as exc:
+        context = _ivanti_context(db, error=str(exc))
+        return templates.TemplateResponse(request, "_admin_ivanti_card.html", context)
+    db.commit()
+    if isinstance(outcome, tickets.TestReport):
+        context = _ivanti_context(db, report=outcome)
+    else:
+        context = _ivanti_context(db, notice=str(outcome))
+    return templates.TemplateResponse(request, "_admin_ivanti_card.html", context)
+
+
+@router.post("/admin/ivanti/settings", response_class=HTMLResponse)
+async def save_ivanti_settings(
+    request: Request,
+    db: DbSession = Depends(db_session),
+    principal: Principal = Depends(_require_web_principal),
+) -> HTMLResponse:
+    from ..core.services import tickets
+
+    form = await request.form()
+
+    def field(name: str) -> str:
+        value = form.get(name)
+        return value if isinstance(value, str) else ""
+
+    # Only what the form actually sent: an absent field keeps its current
+    # value; a blank one in Advanced falls back to the default.
+    def sent(name: str) -> str | None:
+        value = form.get(name)
+        return value if isinstance(value, str) else None
+
+    advanced: dict[str, object] = {}
+    for key in (
+        "tenant_id", "object_type", "number_field", "subject_field", "description_field",
+        "subject_template", "description_template", "extra_fields", "link_template",
+    ):  # fmt: skip
+        value = sent(key)
+        if value is not None and (value.strip() or key in ("tenant_id", "extra_fields")):
+            advanced[key] = value
+    if sent("base_url") is not None and "level_service_field" in form:
+        advanced["attach_pdfs"] = field("attach_pdfs") == "on"
+    levels = {
+        lvl: {
+            key: value
+            for key in ("field", "bo", "display", "parent")
+            if (value := sent(f"level_{lvl}_{key}")) is not None
+        }
+        for lvl in tickets.LEVELS
+    }
+    if any(levels.values()):
+        advanced["levels"] = levels
+
+    def action() -> str:
+        result = tickets.save_settings(
+            db,
+            base_url=field("base_url"),
+            api_key=field("api_key"),
+            advanced=advanced,
+            actor=principal.to_actor(request.client.host if request.client else None),
+        )
+        return "Saved." + (" Run Test before enabling." if not result.tested_at else "")
+
+    return _ivanti_response(request, db, principal, action)
+
+
+@router.post("/admin/ivanti/test", response_class=HTMLResponse)
+def test_ivanti(
+    request: Request,
+    db: DbSession = Depends(db_session),
+    principal: Principal = Depends(_require_web_principal),
+) -> HTMLResponse:
+    from ..core.services import tickets
+
+    return _ivanti_response(
+        request,
+        db,
+        principal,
+        lambda: tickets.run_test(
+            db, actor=principal.to_actor(request.client.host if request.client else None)
+        ),
+    )
+
+
+@router.post("/admin/ivanti/enabled", response_class=HTMLResponse)
+def set_ivanti_enabled(
+    request: Request,
+    enabled: bool = Form(...),
+    db: DbSession = Depends(db_session),
+    principal: Principal = Depends(_require_web_principal),
+) -> HTMLResponse:
+    from ..core.services import tickets
+
+    def action() -> str:
+        tickets.set_ivanti_enabled(
+            db,
+            enabled=enabled,
+            actor=principal.to_actor(request.client.host if request.client else None),
+        )
+        return "Enabled — analysts now see Create ticket on advisories." if enabled else "Disabled."
+
+    return _ivanti_response(request, db, principal, action)
+
+
+@router.post("/admin/ivanti/refresh-lists", response_class=HTMLResponse)
+def refresh_ivanti_lists(
+    request: Request,
+    db: DbSession = Depends(db_session),
+    principal: Principal = Depends(_require_web_principal),
+) -> HTMLResponse:
+    from ..core.services import tickets
+
+    def action() -> str:
+        tickets.clear_cache()
+        return "Lists will be re-read from Ivanti the next time they're needed."
+
+    return _ivanti_response(request, db, principal, action)

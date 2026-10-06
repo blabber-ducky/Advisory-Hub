@@ -131,6 +131,33 @@ data/                        # all persistent data, ./data/<volume> (git- and do
 
 Newest first. Update this when work lands.
 
+### 2026-10-06 — Ivanti ITSM: Create ticket from an advisory
+- **On request** (tenant FRSHEATIntegration SOAP; WSDL read — 36 ops). User
+  chose: button only; Service Request; pop-up with Service → Category →
+  Sub-category → Team from Ivanti, all mandatory; ticket linked and openable;
+  tenant URL + API key on /admin; one-way; API key auth. D-050; ops §10.
+- `integrations/ivanti.py`: SOAP over httpx, defusedxml, SSRF-checked, key
+  only to the tenant host — AuthenticateTenantAPIKey, GetSchemaForObject,
+  PaginationSearch, CreateObject, FindBusinessObject, AddAttachment.
+- `core/services/tickets.py`: settings (system_integration `IVANTI_ITSM`,
+  encrypted key, Advanced with Ivanti defaults), cascading `options()` cached
+  10 min, `run_test()` (read-only; walks the four lists trying up to 10
+  parents; must pass before Enable), `create_ticket()` (re-validates every
+  choice against its parent's list, double-click guard, PDF attach with
+  warning on failure, audit). Table `advisory_ticket`; migration
+  `d4e5f6a7b8c9`.
+- UI: Ivanti panel under Status on the advisory (linked SR numbers, Create
+  ticket / Create another), native `<dialog>` with htmx cascading selects
+  (dependent levels reset out-of-band; Create disabled until all four set);
+  /admin → Ticketing card (URL, key, Test steps, Advanced, Refresh lists).
+- **Verified**: 26 tests against a fake Ivanti shaped like the WSDL (cascade,
+  validation, tampering, double-click, refusal, attachment failure, escaping,
+  entity refusal, key only to tenant, admin flow); 835 total, ruff/mypy clean;
+  migration up/down/up, no drift. Real app + fake Ivanti: configure → Test →
+  Enable → dialog → SR created with PDF, linked; screenshots light/dark.
+  **Not yet run against the real tenant** — needs the API key and the host
+  allowlisted; Test (read-only) first.
+
 ### 2026-10-06 — Microsoft Entra ID sign-in + mailbox-folder sync (roles stay local)
 - **On request**: Entra SSO alongside local user management, and direct sync
   from a mailbox folder; Entra for authentication and mailbox access only,

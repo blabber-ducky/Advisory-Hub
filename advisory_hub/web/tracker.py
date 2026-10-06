@@ -28,6 +28,7 @@ from ..core.services import inventory as inventory_svc
 from ..core.services import iocs as iocs_svc
 from ..core.services import scan as scan_svc
 from ..core.services import sources as sources_svc
+from ..core.services import tickets as tickets_svc
 from ..core.services import vt_lookup as vt_svc
 from ..core.services.auth import PermissionDeniedError, Principal
 from ..core.storage.blobs import FilesystemBlobStore
@@ -199,6 +200,7 @@ def advisory_detail(
         "sources": sources_svc.assignable_sources(db),
         "can_edit_source": principal.user is not None
         and principal.user.role.satisfies(Role.ANALYST),
+        **_tickets_context(db, principal, advisory_id),
     }
     context.update(_scan_panel_context(db, advisory_id))
     return templates.TemplateResponse(request, "advisory_detail_page.html", context)
@@ -361,6 +363,189 @@ def change_advisory_source(
         "source_error": error,
     }
     return templates.TemplateResponse(request, "_source_field.html", context)
+
+
+# ─── Ivanti tickets (D-050) ──────────────────────────────────────────────────
+
+
+def _tickets_context(
+    db: DbSession, principal: Principal, advisory_id: uuid.UUID
+) -> dict[str, object]:
+    enabled = tickets_svc.is_enabled(db)
+    return {
+        "tickets": tickets_svc.tickets_for(db, advisory_id),
+        "ivanti_enabled": enabled,
+        "can_create_ticket": enabled
+        and principal.user is not None
+        and principal.user.role.satisfies(Role.ANALYST),
+    }
+
+
+def _require_analyst_web(principal: Principal) -> None:
+    try:
+        principal.require_role(Role.ANALYST)
+    except PermissionDeniedError:
+        raise HTTPException(status_code=403, detail="Insufficient role") from None
+
+
+def _level_select(
+    levels: dict[str, dict[str, str]],
+    advisory_id: uuid.UUID,
+    level: str,
+    values: list[str],
+    *,
+    selected: str = "",
+) -> dict[str, object]:
+    """One dropdown. ``next_level`` is set only when the level below is
+    narrowed by this one — choosing here then reloads it."""
+    index = tickets_svc.LEVELS.index(level)
+    below = tickets_svc.LEVELS[index + 1] if index + 1 < len(tickets_svc.LEVELS) else None
+    prev = tickets_svc.parent_level(level)
+    return {
+        "advisory_id": advisory_id,
+        "level": level,
+        "label": tickets_svc.LEVEL_LABELS[level],
+        "values": values,
+        "selected": selected,
+        "next_level": below if below and levels[below]["parent"] else None,
+        "waits_for": tickets_svc.LEVEL_LABELS[prev] if prev and levels[level]["parent"] else None,
+    }
+
+
+def _ticket_dialog(
+    request: Request,
+    db: DbSession,
+    advisory_id: uuid.UUID,
+    *,
+    subject: str,
+    description: str,
+    choices: dict[str, str] | None = None,
+    error: str | None = None,
+) -> HTMLResponse:
+    """The dialog body. Lists that don't depend on a choice (Service, and Team
+    unless configured to) are loaded now; the rest follow each choice."""
+    choices = choices or {}
+    s = tickets_svc.get_settings(db)
+    selects = []
+    load_error = None
+    for level in tickets_svc.LEVELS:
+        cfg = s.levels[level]
+        prev = tickets_svc.parent_level(level)
+        parent = choices.get(prev or "", "") if cfg["parent"] else None
+        values: list[str] = []
+        if not cfg["parent"] or parent:
+            try:
+                values = tickets_svc.options(db, level, parent)
+            except tickets_svc.TicketError as exc:
+                load_error = str(exc)
+        selects.append(
+            _level_select(s.levels, advisory_id, level, values, selected=choices.get(level, ""))
+        )
+    context = {
+        "advisory_id": advisory_id,
+        "selects": selects,
+        "subject": subject,
+        "description": description,
+        "error": error or load_error,
+    }
+    return templates.TemplateResponse(request, "_ticket_dialog.html", context)
+
+
+@router.get("/advisories/{advisory_id}/tickets/new", response_class=HTMLResponse)
+def ticket_dialog(
+    advisory_id: uuid.UUID,
+    request: Request,
+    db: DbSession = Depends(db_session),
+    principal: Principal = Depends(_require_web_principal),
+) -> HTMLResponse:
+    _require_analyst_web(principal)
+    advisory = svc.get_advisory(db, advisory_id)
+    if advisory is None:
+        raise HTTPException(status_code=404, detail="Advisory not found")
+    if not tickets_svc.is_enabled(db):
+        raise HTTPException(status_code=409, detail="Ivanti integration is not enabled")
+    subject, description = tickets_svc.draft(db, advisory, principal.display)
+    return _ticket_dialog(request, db, advisory_id, subject=subject, description=description)
+
+
+@router.get("/advisories/{advisory_id}/tickets/options", response_class=HTMLResponse)
+def ticket_options(
+    advisory_id: uuid.UUID,
+    request: Request,
+    level: str,
+    db: DbSession = Depends(db_session),
+    principal: Principal = Depends(_require_web_principal),
+) -> HTMLResponse:
+    """The ``level`` select, narrowed by the choice above it, plus empty
+    (out-of-band) selects for every level below that depends on it."""
+    _require_analyst_web(principal)
+    if level not in tickets_svc.LEVELS:
+        raise HTTPException(status_code=404, detail="Unknown level")
+    s = tickets_svc.get_settings(db)
+    prev = tickets_svc.parent_level(level)
+    parent = request.query_params.get(prev or "", "").strip() or None
+    error = None
+    try:
+        values = tickets_svc.options(db, level, parent if s.levels[level]["parent"] else None)
+    except tickets_svc.TicketError as exc:
+        values, error = [], str(exc)
+    resets = []
+    index = tickets_svc.LEVELS.index(level)
+    for below in tickets_svc.LEVELS[index + 1 :]:
+        if not s.levels[below]["parent"]:
+            break
+        resets.append(_level_select(s.levels, advisory_id, below, []))
+    context = {
+        **_level_select(s.levels, advisory_id, level, values),
+        "resets": resets,
+        "error": error,
+    }
+    return templates.TemplateResponse(request, "_ticket_options.html", context)
+
+
+@router.post("/advisories/{advisory_id}/tickets", response_class=HTMLResponse)
+def create_ticket(
+    advisory_id: uuid.UUID,
+    request: Request,
+    service: str = Form(""),
+    category: str = Form(""),
+    subcategory: str = Form(""),
+    team: str = Form(""),
+    subject: str = Form(""),
+    description: str = Form(""),
+    db: DbSession = Depends(db_session),
+    principal: Principal = Depends(_require_web_principal),
+) -> HTMLResponse:
+    _require_analyst_web(principal)
+    choices = {"service": service, "category": category, "subcategory": subcategory, "team": team}
+    try:
+        # A savepoint: a refusal undoes only this attempt's writes.
+        with db.begin_nested():
+            tickets_svc.create_ticket(
+                db,
+                advisory_id,
+                choices=choices,
+                subject=subject,
+                description=description,
+                actor=principal.to_actor(request.client.host if request.client else None),
+            )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Advisory not found") from None
+    except tickets_svc.TicketError as exc:
+        # Re-show the dialog with what they chose and why it failed.
+        return _ticket_dialog(
+            request, db, advisory_id, subject=subject, description=description,
+            choices=choices, error=str(exc),
+        )  # fmt: skip
+    db.commit()
+    advisory = svc.get_advisory(db, advisory_id)
+    context = {"advisory": advisory, **_tickets_context(db, principal, advisory_id)}
+    response = templates.TemplateResponse(request, "_tickets_panel.html", context)
+    # Swap the panel (not the dialog) and close the dialog.
+    response.headers["HX-Retarget"] = "#tickets-panel"
+    response.headers["HX-Reswap"] = "outerHTML"
+    response.headers["HX-Trigger"] = "ticket-created"
+    return response
 
 
 @router.get("/advisories/{advisory_id}/scan-panel", response_class=HTMLResponse)

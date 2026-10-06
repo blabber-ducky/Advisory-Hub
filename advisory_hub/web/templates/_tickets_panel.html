@@ -1,0 +1,27 @@
+{# Ivanti tickets for an advisory: links that open them in Ivanti, and the
+   button that opens the create dialog (#ticket-dialog, on the detail page). #}
+{% if ivanti_enabled or tickets %}
+<div class="detail-section" id="tickets-panel">
+  <h3>Ivanti</h3>
+  {% for t in tickets %}
+  <div class="ticket-row">
+    <a href="{{ t.url }}" target="_blank" rel="noopener noreferrer">SR {{ t.number or t.rec_id }} &#8599;</a>
+    <div class="muted" style="font-size:.78rem">{{ t.service }} › {{ t.category }} › {{ t.subcategory }} · {{ t.team }}</div>
+    <div class="muted" style="font-size:.74rem">{{ t.created_by.display_name if t.created_by else 'Unknown' }} · {{ t.created_at.strftime('%Y-%m-%d %H:%M UTC') }}{% if t.attachment_count %} · {{ t.attachment_count }} PDF attached{% endif %}</div>
+    {% if t.warning %}<span class="badge badge-warning" title="{{ t.warning }}">Partly done</span>{% endif %}
+  </div>
+  {% else %}
+  <p class="muted" style="font-size:.85rem;margin:0 0 .5rem">No ticket yet.</p>
+  {% endfor %}
+  {% if can_create_ticket %}
+  <button type="button" class="secondary" style="margin-top:.4rem"
+          hx-get="/advisories/{{ advisory.id }}/tickets/new" hx-target="#ticket-dialog-body"
+          hx-indicator="#ticket-open-indicator"
+          hx-on::after-request="if (event.detail.successful) document.getElementById('ticket-dialog').showModal()"
+          {% if tickets %}hx-confirm="This advisory already has a ticket. Create another?"{% endif %}>
+    {{ 'Create another ticket' if tickets else 'Create ticket' }}
+    <span id="ticket-open-indicator" class="htmx-indicator">&hellip;</span>
+  </button>
+  {% endif %}
+</div>
+{% endif %}

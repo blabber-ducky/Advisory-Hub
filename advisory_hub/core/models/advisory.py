@@ -342,6 +342,38 @@ class AdvisoryFlag(Base, UUIDPrimaryKey, TimestampMixin):
     advisory: Mapped[Advisory] = relationship(back_populates="flags")
 
 
+class AdvisoryTicket(Base, UUIDPrimaryKey, TimestampMixin):
+    """A ticket raised in an ITSM tool for this advisory (D-050). Link only:
+    the ticket's workflow lives in the ITSM tool."""
+
+    __tablename__ = "advisory_ticket"
+
+    advisory_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("advisory.id", ondelete="CASCADE"), index=True
+    )
+    system: Mapped[str] = mapped_column(String(32), nullable=False)  # "IVANTI"
+    object_type: Mapped[str] = mapped_column(String(64), nullable=False)  # "ServiceReq#"
+    number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    rec_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: The classification the analyst chose, as sent.
+    service: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(Text, nullable=False)
+    subcategory: Mapped[str] = mapped_column(Text, nullable=False)
+    team: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("user_account.id", ondelete="SET NULL"), nullable=True
+    )
+    attachment_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    #: Set when the ticket was created but something after it failed
+    #: (e.g. attaching the PDF).
+    warning: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_by: Mapped[User | None] = relationship()
+
+
 class RelatedAdvisory(Base, UUIDPrimaryKey, TimestampMixin):
     """Links re-issues. Never auto-merges — see D-020."""
 

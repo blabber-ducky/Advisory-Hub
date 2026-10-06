@@ -1,0 +1,20 @@
+{# One Service/Category/Sub-category/Team dropdown in the ticket dialog.
+   `sel` from tracker._level_select(); `oob` when swapped in out-of-band to
+   reset a level below a changed choice. Choosing a value reloads the next
+   level (only when that level is narrowed by this one). #}
+<div id="ticket-level-{{ sel.level }}" class="ticket-field"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <label for="ticket-{{ sel.level }}">{{ sel.label }} <span class="req" aria-hidden="true">*</span></label>
+  <select id="ticket-{{ sel.level }}" name="{{ sel.level }}" required
+          {% if not sel['values'] %}disabled{% endif %}
+          {% if sel.next_level %}hx-get="/advisories/{{ sel.advisory_id }}/tickets/options?level={{ sel.next_level }}"
+          hx-trigger="change" hx-include="this" hx-target="#ticket-level-{{ sel.next_level }}"
+          hx-swap="outerHTML" hx-indicator="#ticket-loading"{% endif %}>
+    <option value="" disabled {{ 'selected' if not sel.selected else '' }}>
+      {%- if sel['values'] %}Choose…{% elif sel.waits_for %}Choose a {{ sel.waits_for }} first{% else %}No values from Ivanti{% endif -%}
+    </option>
+    {% for value in sel['values'] %}
+    <option value="{{ value }}" {{ 'selected' if value == sel.selected else '' }}>{{ value }}</option>
+    {% endfor %}
+  </select>
+  {% if sel_error %}<p class="error inline-error" role="alert">{{ sel_error }}</p>{% endif %}
+</div>

@@ -297,13 +297,29 @@ docs/decisions.md).
 
 | Column | Type | Notes |
 |---|---|---|
-| `kind` | enum | `NVD`, `VIRUSTOTAL` (API key + switch), `ENTRA_SSO`, `MAILBOX_SYNC` (Entra apps) |
+| `kind` | enum | `NVD`, `VIRUSTOTAL` (API key + switch), `ENTRA_SSO`, `MAILBOX_SYNC` (Entra apps), `IVANTI_ITSM` (ticketing, D-050) |
 | `config` | jsonb | Non-secret settings of the Entra apps: `tenant_id`, `client_id`; mailbox sync also `mailbox`, `folder`, `poll_seconds`. `{}` for NVD/VirusTotal |
 | `enabled` | bool | Explicitly disabling here overrides the equivalent env var — see `core.services.system_integrations.resolve_credential()` |
 | `credential_id` | fk → integration_credential, nullable | NVD/VirusTotal: absent means "fall back to the env var". Entra apps: the encrypted client secret (no env fallback) |
 | `updated_by_id` | fk → user nullable | |
 
 Unique on `kind`.
+
+### `advisory_ticket`
+A ticket raised in an ITSM tool for an advisory (D-050). Link only — the
+ticket's workflow stays in the ITSM tool; nothing is read back.
+
+| Column | Type | Notes |
+|---|---|---|
+| `advisory_id` | fk → advisory (cascade) | Several per advisory allowed |
+| `system` / `object_type` | text | `IVANTI` / e.g. `ServiceReq#` |
+| `number` | text nullable | e.g. `10452` — null only if Ivanti didn't return it |
+| `rec_id` | text | Ivanti RecId |
+| `url` | text | Opens the ticket in Ivanti (from the link template) |
+| `service` / `category` / `subcategory` / `team` | text | What the analyst chose, as sent |
+| `created_by_id` | fk → user nullable | |
+| `attachment_count` | int | PDFs attached |
+| `warning` | text nullable | Created, but something after it failed (e.g. an attachment) |
 
 ### `mailbox_sync_state`
 Where mailbox sync has got to (D-049) — one row.
