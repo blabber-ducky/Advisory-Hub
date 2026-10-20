@@ -63,6 +63,7 @@ class FakeIvanti:
     def __init__(self) -> None:
         self.api_key = "good-key"
         self.calls: list[tuple[str, str]] = []  # (operation, host)
+        self.schema_requests: list[str] = []
         self.created: list[dict[str, str]] = []
         self.attachments: list[tuple[str, bytes]] = []
         self.create_status = "Success"
@@ -95,12 +96,38 @@ class FakeIvanti:
             return httpx.Response(200, text=_soap(op, "SESSION-1"))
         assert text("sessionKey") == "SESSION-1"
         if op == "GetSchemaForObject":
+            # Real Ivanti 404s this call for "ServiceReq" (the "#" stripped) even
+            # though the business object is reachable via PaginationSearch as
+            # "ServiceReq#" — so the fake is strict about the "#" being present,
+            # the same way the real tenant is.
+            self.schema_requests.append(text("objectName"))
+            if not text("objectName").endswith("#"):
+                return httpx.Response(
+                    500,
+                    text=f'<soap:Envelope xmlns:soap="{SOAP}"><soap:Body><soap:Fault>'
+                    "<faultcode>soap:Server</faultcode>"
+                    "<faultstring>Unhandled system exception: Object not found</faultstring>"
+                    "</soap:Fault></soap:Body></soap:Envelope>",
+                )
             return httpx.Response(200, text=_soap(op, escape(SCHEMA)))
         if op == "PaginationSearch":
             query = body.find(f"{{{NS}}}ObjectQuery")
             bo = query.find(f"{{{NS}}}From").get("Object")
             display = query.find(f".//{{{NS}}}Field").get("Name")
-            where = {r.get("Field"): r.get("Value") for r in query.iter(f"{{{NS}}}Rule")}
+            # Real Ivanti needs <Where> present even with no rules: omitting it
+            # turns into a server-side SQL error (CI-subtype objects) or a bare
+            # "NotFound" status (plain objects) despite matching rows existing.
+            # The fake enforces the same contract so a regression fails loudly.
+            where_el = query.find(f"{{{NS}}}Where")
+            if where_el is None:
+                return httpx.Response(
+                    500,
+                    text=f'<soap:Envelope xmlns:soap="{SOAP}"><soap:Body><soap:Fault>'
+                    "<faultcode>soap:Server</faultcode>"
+                    "<faultstring>Unhandled system exception: syntax error</faultstring>"
+                    "</soap:Fault></soap:Body></soap:Envelope>",
+                )
+            where = {r.get("Field"): r.get("Value") for r in where_el.iter(f"{{{NS}}}Rule")}
             values = self.lists[bo](where) if text("skip") == "0" else []
             objs = "".join(
                 _wrap("WebServiceBusinessObject", _bo({display: v}, f"R-{v}")) for v in values
@@ -230,6 +257,7 @@ class TestSettingsAndTest:
         assert "for 'Endpoint Security'" in steps["Category list"].detail
         assert "for 'Patching'" in steps["Sub-category list"].detail
         assert "ProfileLink" in steps["Ticket fields"].detail  # required, not set here
+        assert fake.schema_requests == ["ServiceReq#"]  # "#" preserved, not stripped
 
     def test_bad_key(self, db, fake) -> None:
         tickets.save_settings(db, base_url=BASE, api_key="wrong", advanced=None, actor=ACTOR)
@@ -406,6 +434,117 @@ def test_client_refuses_xml_entities() -> None:
             client.authenticate()
     finally:
         ivanti.validate_outbound_url = ivanti_validate
+
+
+def _authed_client(monkeypatch, handler) -> ivanti.IvantiClient:
+    """An IvantiClient already past AuthenticateTenantAPIKey, so a test's
+    handler only has to deal with the one operation it cares about."""
+    monkeypatch.setattr(ivanti, "validate_outbound_url", lambda url: None)
+    calls: list[httpx.Request] = []
+
+    def wrapped(request: httpx.Request) -> httpx.Response:
+        op = request.headers["SOAPAction"].strip('"').split("/")[-1]
+        if op == "AuthenticateTenantAPIKey":
+            return httpx.Response(200, text=_soap(op, "SESSION-1"))
+        calls.append(request)
+        return handler(request)
+
+    client = ivanti.IvantiClient(
+        BASE, "t", "k", httpx.Client(transport=httpx.MockTransport(wrapped))
+    )
+    client.calls = calls  # type: ignore[attr-defined]
+    return client
+
+
+def test_search_sends_where_even_with_no_filter_rules(monkeypatch) -> None:
+    """Regression: omitting <Where> entirely (the natural thing to do with
+    no filter rules) made a real tenant return a SQL syntax error for one
+    business object and a bare "NotFound" for another, despite matching
+    rows existing in both. <Where> must always be sent, even empty."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = SafeET.fromstring(request.content).find(f"{{{SOAP}}}Body")[0]
+        query = body.find(f"{{{NS}}}ObjectQuery")
+        assert query.find(f"{{{NS}}}Where") is not None
+        return httpx.Response(200, text=_soap("PaginationSearch", "<status>Success</status>"))
+
+    client = _authed_client(monkeypatch, handler)
+    assert client.search("CI#Service", ["Name"]) == []
+    assert len(client.calls) == 1  # type: ignore[attr-defined]
+
+
+def test_search_treats_notfound_status_as_empty_not_an_error(monkeypatch) -> None:
+    """Regression: a real tenant answers a query with genuinely zero
+    matching rows with <status>NotFound</status>, not an empty success —
+    confirmed for a service with no sub-categories at all. That must come
+    back as an empty list, not an exception."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=_soap("PaginationSearch", "<status>NotFound</status>"))
+
+    client = _authed_client(monkeypatch, handler)
+    assert client.search("Subcategory#", ["Category"], [("Service", "unclassified")]) == []
+
+
+def test_search_stops_paging_when_a_later_page_fails(monkeypatch) -> None:
+    """Regression: after a full first page, a real tenant answered the next
+    `skip` (past the last row) with a hard SOAP fault instead of an empty
+    result, for a business object with no genuine NotFound convention
+    (CI#Service). The already-fetched first page must still come back
+    rather than the whole search failing."""
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            objs = _wrap("WebServiceBusinessObject", _bo({"Name": "Automation"}, "R-1"))
+            inner = "<status>Success</status>" + _wrap(
+                "objList", _wrap("ArrayOfWebServiceBusinessObject", objs)
+            )
+            return httpx.Response(200, text=_soap("PaginationSearch", inner))
+        return httpx.Response(
+            500,
+            text=f'<soap:Envelope xmlns:soap="{SOAP}"><soap:Body><soap:Fault>'
+            "<faultcode>soap:Server</faultcode><faultstring>syntax error</faultstring>"
+            "</soap:Fault></soap:Body></soap:Envelope>",
+        )
+
+    client = _authed_client(monkeypatch, handler)
+    assert client.search("CI#Service", ["Name"]) == [{"RecId": "R-1", "Name": "Automation"}]
+    assert calls["n"] == 2
+
+
+def test_search_still_raises_when_the_first_page_fails(monkeypatch) -> None:
+    """A later page's failure is swallowed as "no more rows" (see above),
+    but the first page failing is a genuine error and must still raise."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            500,
+            text=f'<soap:Envelope xmlns:soap="{SOAP}"><soap:Body><soap:Fault>'
+            "<faultcode>soap:Server</faultcode><faultstring>bad field</faultstring>"
+            "</soap:Fault></soap:Body></soap:Envelope>",
+        )
+
+    client = _authed_client(monkeypatch, handler)
+    with pytest.raises(ivanti.IvantiError, match="bad field"):
+        client.search("CI#Service", ["Nope"])
+
+
+def test_schema_fields_does_not_strip_the_trailing_hash(monkeypatch) -> None:
+    """Regression: GetSchemaForObject 404s ("Object not found") for a
+    business object name with its trailing "#" stripped, even though the
+    same object is reachable via PaginationSearch as "ServiceReq#"."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = SafeET.fromstring(request.content).find(f"{{{SOAP}}}Body")[0]
+        seen.append(body.findtext(f"{{{NS}}}objectName") or "")
+        return httpx.Response(200, text=_soap("GetSchemaForObject", escape(SCHEMA)))
+
+    client = _authed_client(monkeypatch, handler)
+    client.schema_fields("ServiceReq#")
+    assert seen == ["ServiceReq#"]
 
 
 # ─── Web ──────────────────────────────────────────────────────────────────────

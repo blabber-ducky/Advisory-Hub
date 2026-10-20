@@ -76,10 +76,15 @@ class IvantiClient:
 
     def schema_fields(self, object_name: str) -> dict[str, bool]:
         """Field name → required?, from ``GetSchemaForObject`` (an XML
-        schema). Empty if the schema can't be read."""
-        result = self._call(
-            "GetSchemaForObject", self._auth() + _el("objectName", object_name.rstrip("#"))
-        )
+        schema). Empty if the schema can't be read.
+
+        ``object_name`` is passed through exactly as configured (e.g.
+        ``ServiceReq#``) — Ivanti's own business-object naming already
+        includes the ``#`` for these record types, and stripping it causes
+        ``GetSchemaForObject`` to report "Object not found" even for an
+        object ``search()`` can reach fine, confirmed against a real
+        tenant."""
+        result = self._call("GetSchemaForObject", self._auth() + _el("objectName", object_name))
         text = (result.text or "").strip()
         if not text:
             return {}
@@ -113,19 +118,45 @@ class IvantiClient:
             f'IsClosingBracket="false" BracketLevel="0"><Rules /></Rule>'
             for field, value in where
         )
+        # <Where> must always be sent, even empty: omitting it entirely (the
+        # natural thing to do with no filter rules) breaks PaginationSearch
+        # against a real tenant — confirmed to turn into either a server-side
+        # SQL syntax error (for a CI-subtype object like CI#Service) or a
+        # bare "NotFound" status (for a plain object like StandardUserTeam#)
+        # even though matching rows exist.
         query = (
             f"<ObjectQuery><From Object={quoteattr(bo)} />"
             f'<Select All="false"><Fields>{select}</Fields></Select>'
-            + (f"<Where>{rules}</Where>" if rules else "")
-            + "</ObjectQuery>"
+            f"<Where>{rules}</Where>"
+            "</ObjectQuery>"
         )
         records: list[dict[str, str]] = []
         seen: set[str] = set()
-        for _ in range(MAX_PAGES):
-            result = self._call(
-                "PaginationSearch", self._auth() + query + _el("skip", str(len(records)))
-            )
-            self._check_status(result)
+        for page_num in range(MAX_PAGES):
+            try:
+                result = self._call(
+                    "PaginationSearch", self._auth() + query + _el("skip", str(len(records)))
+                )
+            except IvantiError:
+                # A real tenant can answer a `skip` past the last row with a
+                # hard SOAP fault (confirmed: a server-side SQL exception on
+                # one business object) instead of an empty result. The first
+                # page failing is a real error; every later page already had
+                # a successful one before it, so treat this as "no more
+                # rows" instead.
+                if page_num == 0:
+                    raise
+                break
+            status = (result.findtext(_q("status")) or "").strip()
+            if status.lower() == "notfound":
+                # PaginationSearch's own convention for "zero rows matched"
+                # — confirmed against a real tenant on both a genuinely
+                # empty first page and a `skip` past the last row. Not an
+                # error, just the search having nothing (more) to return.
+                break
+            if status and status.lower() != "success":
+                reason = (result.findtext(_q("exceptionReason")) or status).strip()
+                raise IvantiError(f"Ivanti: {reason[:300]}")
             page = [_fields(obj) for obj in result.iter(_q("WebServiceBusinessObject"))]
             fresh = [r for r in page if _identity(r) not in seen]
             if not fresh:

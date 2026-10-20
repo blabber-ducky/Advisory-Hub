@@ -1,6 +1,8 @@
 Advisory/
 # Real inventory exports (Endpoint Central, Lansweeper) — internal estate data
 Inventory/
+# Vendor support docs (Ivanti) — reference material, not project source
+MCME-Docs/
 *.msg
 *.eml
 data/

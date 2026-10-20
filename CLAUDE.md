@@ -131,6 +131,56 @@ data/                        # all persistent data, ./data/<volume> (git- and do
 
 Newest first. Update this when work lands.
 
+### 2026-10-20 — Bug fix: Ivanti ITSM Test failed every list against a real tenant
+- User stood up a local test instance against a real Ivanti UAT tenant
+  (`mediclinic-ae-ism-uat.ivanticloud.com`) and ran **Test**: API key signed
+  in fine, but every list and the ticket-schema check failed. Reproduced and
+  root-caused live against that tenant (read-only `GetSchemaForObject`/
+  `PaginationSearch` calls — the same operations Test itself makes), with
+  the user's explicit sign-off before probing with the stored key.
+- **Three real, tenant-independent bugs in `integrations/ivanti.py`**, all
+  present since D-050 and all invisible to the existing test suite because
+  the fake Ivanti was too lenient to notice any of them:
+  1. `search()` omitted the `<Where>` element entirely when there were no
+     filter rules. A real tenant needs it present even empty — omitting it
+     turned into a server-side SQL syntax error for one business object
+     (`CI#Service`) and a bare `NotFound` status for another
+     (`StandardUserTeam#`), despite matching rows existing in both.
+  2. `schema_fields()` stripped the trailing `#` off the object name before
+     calling `GetSchemaForObject`. That call 404s ("Object not found") with
+     the `#` stripped, even for an object `search()` reaches fine as
+     `ServiceReq#`.
+  3. `search()`'s pagination loop only stopped on an *empty* page, but a
+     real tenant answers a `skip` past the last row with a hard failure
+     instead — a SOAP fault for one object, a `NotFound` status for
+     another — and a **genuinely empty result** (a Service with zero
+     Sub-categories) also comes back as `NotFound`, not an empty success.
+     Fixed by: treating `NotFound` from `PaginationSearch` as "zero rows",
+     not an error, at any page; and treating a later page's hard failure as
+     "no more rows" (only a first-page failure still raises).
+- Fixed all three; strengthened `tests/test_ivanti.py`'s fake Ivanti to
+  actually enforce the `<Where>` and unstripped-`#` contracts (it
+  previously accepted either), and added dedicated regression tests for
+  all three (plus the still-raises-on-a-genuine-first-page-failure case).
+- **Separately, not a bug**: this tenant's `Category#`/`Subcategory#`
+  classification isn't two independently-queryable objects the way the
+  "usual names" default assumes — `Subcategory#` itself carries `Service`
+  and `Category` text fields, and distinct values of those *are* the
+  Service/Category lists (confirmed live: e.g. Service `Security` →
+  Categories `Cyber incidents`, `Vulnerabilities`, `Malicious code`, …).
+  Pointed Category's Advanced settings at `bo=Subcategory#,
+  display=Category, parent=Service` and Sub-category's `display` at the
+  real field name `SubCategory` (through the admin UI, not by editing
+  defaults) — this is exactly what §10.2 already tells an admin to expect
+  and adjust, not a code change.
+- **Verified**: 31 tests passing in `test_ivanti.py` (3 new), 850+ passing
+  project-wide, `ruff`/`mypy --strict` clean. End-to-end against the real
+  UAT tenant through the actual admin **Test** button: all six checks now
+  pass (API key, Ticket fields — 945 fields on `ServiceReq#`, and all four
+  lists with real data — 19 Services, real Category/Sub-category values
+  per Service, 51 Teams). Ticket creation itself was not exercised (no
+  ticket was created against the real tenant).
+
 ### 2026-10-06 — Custom sources, bulk edit, resizable columns, grouped admin
 - **On request.** D-051.
 - **Sources** on /admin (Email intake): add / edit / deactivate
