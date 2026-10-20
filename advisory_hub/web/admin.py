@@ -519,10 +519,13 @@ async def save_ivanti_settings(
     advanced: dict[str, object] = {}
     for key in (
         "tenant_id", "object_type", "number_field", "subject_field", "description_field",
-        "subject_template", "description_template", "extra_fields", "link_template",
+        "subject_template", "description_template", "extra_fields", "requester_email",
+        "link_template",
     ):  # fmt: skip
         value = sent(key)
-        if value is not None and (value.strip() or key in ("tenant_id", "extra_fields")):
+        if value is not None and (
+            value.strip() or key in ("tenant_id", "extra_fields", "requester_email")
+        ):
             advanced[key] = value
     if sent("base_url") is not None and "level_service_field" in form:
         advanced["attach_pdfs"] = field("attach_pdfs") == "on"

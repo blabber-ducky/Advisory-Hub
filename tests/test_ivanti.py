@@ -25,6 +25,7 @@ SERVICES = ["Endpoint Security", "Network", "Email"]
 CATEGORIES = {"Endpoint Security": ["Patching", "Malware"], "Network": ["Firewall"]}
 SUBCATEGORIES = {"Patching": ["Operating System", "Third-party"], "Firewall": ["Rules"]}
 TEAMS = ["SOC", "Desktop Support", "Network Team"]
+EMPLOYEES = ["ana@example.invalid"]
 SCHEMA = (
     '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="Incident">'
     "<xs:complexType><xs:sequence>"
@@ -73,6 +74,7 @@ class FakeIvanti:
             "Category#": lambda where: CATEGORIES.get(where.get("Service", ""), []),
             "Subcategory#": lambda where: SUBCATEGORIES.get(where.get("Category", ""), []),
             "StandardUserTeam#": lambda where: TEAMS,
+            "Employee#": lambda where: [e for e in EMPLOYEES if e == where.get("PrimaryEmail")],
         }
 
     def handler(self, request: httpx.Request) -> httpx.Response:
@@ -258,6 +260,34 @@ class TestSettingsAndTest:
         assert "for 'Patching'" in steps["Sub-category list"].detail
         assert "ProfileLink" in steps["Ticket fields"].detail  # required, not set here
         assert fake.schema_requests == ["Incident#"]  # "#" preserved, not stripped
+        assert "Requester" not in steps  # not configured: no step at all
+
+    def test_requester_email_found_passes_test(self, db, fake) -> None:
+        tickets.save_settings(
+            db, base_url=BASE, api_key="good-key",
+            advanced={"requester_email": "ana@example.invalid"}, actor=ACTOR,
+        )  # fmt: skip
+        report = tickets.run_test(db, actor=ACTOR)
+        assert report.ok, report.steps
+        step = next(s for s in report.steps if s.label == "Requester")
+        assert step.ok and "ana@example.invalid" in step.detail
+
+    def test_requester_email_not_found_fails_test(self, db, fake) -> None:
+        tickets.save_settings(
+            db, base_url=BASE, api_key="good-key",
+            advanced={"requester_email": "nobody@example.invalid"}, actor=ACTOR,
+        )  # fmt: skip
+        report = tickets.run_test(db, actor=ACTOR)
+        assert not report.ok
+        step = next(s for s in report.steps if s.label == "Requester")
+        assert not step.ok and "nobody@example.invalid" in step.detail
+
+    def test_requester_email_must_look_like_an_email(self, db, fake) -> None:
+        with pytest.raises(tickets.TicketError, match="email address"):
+            tickets.save_settings(
+                db, base_url=BASE, api_key="good-key",
+                advanced={"requester_email": "not-an-email"}, actor=ACTOR,
+            )  # fmt: skip
 
     def test_extra_field_ending_in_recid_is_not_checked_against_the_schema(self, db, fake) -> None:
         """Regression: Customer_Shadowlink_RecID is a real, settable field
@@ -400,6 +430,22 @@ class TestCreate:
         sent = configured.created[0]
         assert sent["OwnerTeam_Valid"] == "R-SOC"  # the fake's RecId for "SOC", not the text
         assert "OwnerTeam" not in sent
+
+    def test_requester_email_sets_the_customer_shadow_link(self, db, configured, advisory) -> None:
+        tickets.save_settings(
+            db, base_url=BASE, api_key=None,
+            advanced={"requester_email": "ana@example.invalid"}, actor=ACTOR,
+        )  # fmt: skip
+        assert tickets.run_test(db, actor=ACTOR).ok
+        tickets.set_ivanti_enabled(db, enabled=True, actor=ACTOR)
+
+        subject, description = tickets.draft(db, advisory, "Ana")
+        tickets.create_ticket(
+            db, advisory.id, choices=CHOICES, subject=subject, description=description, actor=ACTOR
+        )
+        sent = configured.created[0]
+        assert sent["Customer_Shadowlink_Category"] == "Employee"
+        assert sent["Customer_Shadowlink_RecID"] == "R-ana@example.invalid"
 
     def test_all_four_are_required(self, db, configured, advisory) -> None:
         with pytest.raises(tickets.TicketError, match="Sub-category"):

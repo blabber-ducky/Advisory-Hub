@@ -71,6 +71,8 @@
       <p class="muted" style="font-size:.76rem;margin:.2rem 0 .7rem">Placeholders: {% for p in ivanti_placeholders %}<code>{{ '{' ~ p ~ '}' }}</code> {% endfor %}</p>
       <div class="ticket-field"><label for="iv-extra">Extra fields set on every ticket <span class="muted" style="font-weight:400">(Name=Value per line, e.g. Source=Security Advisory)</span></label>
         <textarea id="iv-extra" name="extra_fields" rows="3">{{ adv.extra_fields }}</textarea></div>
+      <div class="ticket-field"><label for="iv-requester">Requester email <span class="muted" style="font-weight:400">(sets the ticket's Customer — looked up by email on every ticket; blank: no Customer set)</span></label>
+        <input type="email" id="iv-requester" name="requester_email" value="{{ adv.requester_email }}" placeholder="e.g. soc@yourfirm.com"></div>
       <div class="ticket-field"><label for="iv-link">Ticket link template <span class="muted" style="font-weight:400">({base} {recid} {number} {object_type_q})</span></label>
         <input type="text" id="iv-link" name="link_template" value="{{ adv.link_template }}"></div>
       <label style="display:flex;gap:.4rem;align-items:center;font-weight:400;margin-top:.5rem">

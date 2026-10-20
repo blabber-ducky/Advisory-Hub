@@ -56,6 +56,16 @@ CACHE_SECONDS = 600
 #: Neither is ever listed by GetSchemaForObject, confirmed against a real
 #: tenant whose records carry both, populated.
 SHADOW_LINK_SUFFIXES = ("_Valid", "_RecID")
+#: The Incident's Customer (requester) shadow link — confirmed on a real
+#: tenant where every Incident has one set. Resolved live from the
+#: "Requester email" Advanced setting via the Employee business object;
+#: never a stored RecId, so a changed or deactivated account is caught
+#: at Test/create time rather than silently going stale.
+CUSTOMER_EMPLOYEE_BO = "Employee#"
+CUSTOMER_EMAIL_FIELD = "PrimaryEmail"
+CUSTOMER_CATEGORY_FIELD = "Customer_Shadowlink_Category"
+CUSTOMER_RECID_FIELD = "Customer_Shadowlink_RecID"
+CUSTOMER_CATEGORY_VALUE = "Employee"
 ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
 #: An identical request this soon after a ticket was created returns that
 #: ticket instead of creating a second one (double-click guard).
@@ -99,6 +109,10 @@ DEFAULTS: dict[str, Any] = {
         "Advisory Hub: {url}"
     ),
     "extra_fields": "",
+    #: Blank: no Customer is set on the ticket. A tenant that requires one
+    #: (confirmed by Test) needs an Employee's email here, resolved live —
+    #: never a RecId entered or stored directly.
+    "requester_email": "",
     "attach_pdfs": True,
     "link_template": (
         "{base}/HEAT/Default.aspx?Scope=ObjectWorkspace&CommandId=Search"
@@ -205,7 +219,7 @@ def save_settings(
         db.add(credential)
         db.flush()
         row.credential_id = credential.id
-    query_keys = ("base_url", "tenant_id", "levels", "object_type")
+    query_keys = ("base_url", "tenant_id", "levels", "object_type", "requester_email")
     changed_query = key or any(previous.get(k) != config.get(k) for k in query_keys)
     config["tested_at"] = "" if changed_query else previous.get("tested_at", "")
     if changed_query:
@@ -251,6 +265,9 @@ def _validate_advanced(advanced: dict[str, Any]) -> None:
                 f"{LEVEL_LABELS[level]}: field, list object and display field are required."
             )
     _parse_extra_fields(str(advanced["extra_fields"]))
+    requester_email = str(advanced["requester_email"]).strip()
+    if requester_email and "@" not in requester_email:
+        raise TicketError("Requester email doesn't look like an email address.")
 
 
 def _check_template(template: str, allowed: tuple[str, ...], label: str) -> None:
@@ -358,6 +375,28 @@ def _resolve_recid(
     raise TicketError(f"Couldn't resolve {value!r} to a record for {label} in Ivanti.")
 
 
+def _resolve_requester(client: IvantiClient, email: str) -> dict[str, str]:
+    """The two fields that set an Incident's Customer (requester), resolved
+    live from the Employee whose email matches. Called at both Test (to
+    catch a wrong or deactivated address before any ticket is attempted)
+    and create time."""
+    try:
+        records = client.search(
+            CUSTOMER_EMPLOYEE_BO, [CUSTOMER_EMAIL_FIELD], [(CUSTOMER_EMAIL_FIELD, email)]
+        )
+    except IvantiError as exc:
+        raise TicketError(str(exc)) from None
+    for found in records:
+        if found.get(CUSTOMER_EMAIL_FIELD, "").strip().lower() == email.lower() and found.get(
+            "RecId"
+        ):
+            return {
+                CUSTOMER_CATEGORY_FIELD: CUSTOMER_CATEGORY_VALUE,
+                CUSTOMER_RECID_FIELD: found["RecId"],
+            }
+    raise TicketError(f"No Employee with the email {email!r} was found in Ivanti.")
+
+
 @dataclass(slots=True)
 class TestStep:
     label: str
@@ -424,6 +463,16 @@ def run_test(db: DbSession, *, actor: Actor) -> TestReport:
         report.steps.append(
             TestStep("Ticket fields", True, "Schema not readable — skipped (lists checked below).")
         )
+
+    requester_email = str(adv["requester_email"]).strip()
+    if requester_email:
+        try:
+            _resolve_requester(client, requester_email)
+            report.steps.append(
+                TestStep("Requester", True, f"Found an Employee with email {requester_email}.")
+            )
+        except TicketError as exc:
+            report.steps.append(TestStep("Requester", False, str(exc)))
 
     # Each cascading level is tried under up to PARENTS_TRIED of the previous
     # level's values (some services have no categories); the first parent with
@@ -594,13 +643,16 @@ def create_ticket(
 
     adv = s.advanced
     object_type = str(adv["object_type"])
+    client = _client(db, s)
+    requester_email = str(adv["requester_email"]).strip()
+    requester_fields = _resolve_requester(client, requester_email) if requester_email else {}
     values = {
         **_parse_extra_fields(str(adv["extra_fields"])),
+        **requester_fields,
         **{s.levels[lvl]["field"]: sent_values[lvl] for lvl in LEVELS},
         str(adv["subject_field"]): subject[:250],
         str(adv["description_field"]): description,
     }
-    client = _client(db, s)
     try:
         rec_id, created = client.create(object_type, values)
     except IvantiError as exc:

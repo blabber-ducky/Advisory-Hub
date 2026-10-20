@@ -694,22 +694,21 @@ level.
 
 **If every Incident on your tenant always has a Customer, Division, or
 Source set** (check a few real ones), your tenant likely refuses to create
-one without them too — fields Advisory Hub's dialog doesn't collect. Add
-them as extra fields instead, e.g.:
+one without them too — fields Advisory Hub's dialog doesn't collect.
 
-```
-Customer_Shadowlink_Category=Employee
-Customer_Shadowlink_RecID=<RecId of a service-account Employee>
-Division=MCME
-Source=Phone
-```
+For **Customer**: set **Requester email** under Advanced to an Employee's
+email (a dedicated service account, not a real person's personal inbox, is
+the usual choice). It's resolved live against Ivanti on every **Test** and
+every ticket — never store or paste a RecId anywhere; if the address can't
+be resolved, Test fails with the address named. Changing it requires a new
+Test, same as the tenant URL or record type.
 
-`Customer_Shadowlink_RecID` (and other `*_RecID` shadow links) are, like
-`_Valid` fields, never listed by Test's schema check — its "Not checked"
-note for them is expected, not a problem. Finding the RecId requires a
-one-off lookup (`Employee#`, filtered by `PrimaryEmail`); there's no UI
-for this yet, so either read it from an existing ticket or ask whoever has
-Ivanti API access to look it up.
+For **Division**/**Source** (plain literal values, not shadow links): set
+them as extra fields, e.g. `Division=MCME` and `Source=Phone`.
+
+(`Customer_Shadowlink_RecID`, which Requester email sets internally, and
+other `*_RecID`/`*_Valid` shadow links are never listed by Test's schema
+check — its "Not checked" note for them is expected, not a problem.)
 
 | Situation | Behaviour |
 |---|---|

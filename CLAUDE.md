@@ -131,6 +131,39 @@ data/                        # all persistent data, ./data/<volume> (git- and do
 
 Newest first. Update this when work lands.
 
+### 2026-10-20 — Ivanti "Requester email": no RecId ever hardcoded
+- Follow-on from the vendor-docs cross-check (below): finding the right
+  value for the ticket's Customer shadow link had briefly involved a
+  one-off script to resolve one person's email to a RecId, then pasting
+  that RecId into Extra fields. Asked to remove that from the codebase and
+  give the admin a proper way to set it — a RecId hardcoded anywhere
+  (code, docs, or an Advanced setting an admin has to maintain by hand) is
+  wrong on its own terms: it silently goes stale if that Employee record
+  ever changes, and there was no reason to require the admin to go find
+  one themselves when Advisory Hub already has a live, authenticated
+  connection that can do it.
+- New Advanced setting **Requester email** (`tickets.DEFAULTS["requester_email"]`,
+  blank by default — no Customer set unless configured). `_resolve_requester()`
+  looks it up against `Employee#` by `PrimaryEmail`, live, both at **Test**
+  (a new "Requester" step — confirms the address resolves before anything
+  is ever created) and at ticket-creation time, resolving to
+  `Customer_Shadowlink_Category=Employee` /
+  `Customer_Shadowlink_RecID=<RecId>`. Changing the email forces a new Test,
+  same as the other settings that affect what gets sent. A blank or
+  unresolvable email never reaches Ivanti silently — Test and create both
+  fail with a clear message naming the address.
+- Admin UI: a new "Requester email" field under Advanced, next to the
+  other per-tenant settings — not a secret, so no encryption or write-only
+  handling needed, unlike the tenant API key.
+- **Verified**: `ruff`/`mypy --strict` clean, 37 tests in `test_ivanti.py`
+  (4 new: Test passes when the email resolves and shows no "Requester"
+  step when unset; Test fails with the address named when it doesn't;
+  save rejects a value with no `@`; `create_ticket()`'s payload carries
+  the resolved RecId, not the email), 850+ passing project-wide. End-to-end
+  against the real UAT tenant through the actual admin UI: set a real
+  service account's email in the new field (no RecId typed anywhere),
+  Test passed all six checks including the new "Requester" step.
+
 ### 2026-10-20 — Cross-checked the vendor docs against the Ivanti integration
 - User asked to validate the Advanced settings against the Ivanti support
   docs they'd supplied (`MCME-Docs/`, gitignored). Confirmed one thing
@@ -147,24 +180,12 @@ Newest first. Update this when work lands.
   populated on every record, but `GetSchemaForObject` never lists it —
   same blind spot, different suffix). "Ticket fields" no longer fails
   over either suffix.
-- **No code change needed for Customer/Division/Source themselves** — the
-  existing "extra fields" mechanism already covers it. Asked the user who
-  should be the Customer (a per-advisory requester isn't collected by the
-  dialog); they chose a dedicated service account
-  (`mithun.rosinth@mediclinic.ae`, Department "GRC & Security") over
-  guessing from the handful of repeat requesters already visible on real
-  Security incidents. Resolved its `Employee#` RecId live (read-only) and
-  set, with the user's explicit values for Division/Source (`MCME`/
-  `Phone`, not the `Email` first suggested):
-  ```
-  Customer_Shadowlink_Category=Employee
-  Customer_Shadowlink_RecID=30D706528B0940748A6613637A560761
-  Division=MCME
-  Source=Phone
-  ```
-- docs/operations.md §10.2: documented the `_Valid` shadow-link pattern,
-  the Customer/Division/Source gap and its extra-fields fix, and that
-  finding a Customer's RecId has no UI yet — a one-off lookup.
+- **Division/Source** need no code change — the existing "extra fields"
+  mechanism covers plain literal values. **Customer** needs a RecId,
+  which the admin should never have to find or paste by hand — a
+  dedicated "Requester email" setting followed immediately (above).
+- docs/operations.md §10.2: documented the `_Valid`/`_RecID` shadow-link
+  pattern and the Customer/Division/Source gap.
 - **Verified**: `ruff`/`mypy --strict` clean, 33 tests in `test_ivanti.py`
   (1 new: an extra field ending in `_RecID` doesn't fail "Ticket fields"),
   850+ passing project-wide. Test passed all six checks against the real
