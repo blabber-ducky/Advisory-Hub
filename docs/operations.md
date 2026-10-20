@@ -627,19 +627,27 @@ in the folder. The card shows the last sync, its status/error and counts.
 
 ## 10. Ivanti ITSM — raising tickets from advisories
 
-Analysts raise an Ivanti **Service Request** from an advisory: **Create
+Analysts raise an Ivanti **Incident** from an advisory: **Create
 ticket** on the advisory → a dialog with **Service → Category → Sub-category →
 Team** read live from your Ivanti (each choice narrows the next; all four
 required), plus a subject and description pre-filled from the advisory → the
-SR is created, the advisory's PDF attached, and the SR number shown on the
-advisory as a link that opens it in Ivanti. One-way: nothing is read back
-(D-050).
+Incident is created, the advisory's PDF attached, and the Incident number
+shown on the advisory as a link that opens it in Ivanti. One-way: nothing is
+read back (D-050, D-052).
+
+The default record type is `Incident#`, not a Service Request — on a real
+tenant, Service Requests had no Category/Subcategory concept at all
+(classified instead by Service plus a linked product/catalog item), while
+Incidents carry the same four classification fields this dialog expects.
+If your tenant's Service Requests *do* support Category/Subcategory, the
+record type can be changed back under Advanced (10.2) — Test will confirm
+either way.
 
 ### 10.1 Setup
 
 1. **In Ivanti**, create a **tenant API key** for an integration account
    whose role can read Services, Categories, Sub-categories and Teams and
-   create Service Requests (Configuration → Security Controls → API Keys).
+   create Incidents (Configuration → Security Controls → API Keys).
 2. **On the server**, add the tenant host (e.g.
    `mediclinic-ae-ism.ivanticloud.com`) to `OUTBOUND_ALLOWLIST` and restart.
    Set `PUBLIC_BASE_URL` too if you want the ticket description to link back
@@ -647,8 +655,8 @@ advisory as a link that opens it in Ivanti. One-way: nothing is read back
 3. **/admin → Ticketing → Ivanti ITSM**: **Tenant URL** (the `https://…`
    address only) and **API key** → **Save** → **Test** → **Enable**.
 
-**Test** is read-only. It signs in with the key, reads the Service Request's
-fields, and walks the four lists (services; categories of a service;
+**Test** is read-only. It signs in with the key, reads the ticket record
+type's fields, and walks the four lists (services; categories of a service;
 sub-categories of a category; teams), reporting each. Enable stays off until
 a Test passes, and any change to where lists come from needs a new Test.
 
@@ -660,22 +668,26 @@ each list has:
 
 | Setting | Meaning | Usual value |
 |---|---|---|
-| Ticket field | Field set on the Service Request | `Service`, `Category`, `Subcategory`, `OwnerTeam` |
+| Ticket field | Field set on the ticket | `Service`, `Category`, `Subcategory`, `OwnerTeam` |
 | Values from | Business object the choices are read from | `CI#Service`, `Category#`, `Subcategory#`, `StandardUserTeam#` |
 | Shown field | Field of that object listed in the dropdown (and sent) | `Name`, `Name`, `Name`, `Team` |
 | Narrowed by field | Field of that object that must equal the choice above (blank = not narrowed) | —, `Service`, `Category`, — |
 
-Change only what Test reports, then Test again. Also under Advanced: record
-type (`ServiceReq#`), the number/subject/description fields, the subject and
-description templates (placeholders listed on the card), **extra fields** set
-on every ticket (`Name=Value` per line — e.g. a `ProfileLink` or `Source` your
-business rules require; Test lists required fields that nothing sets), attach
-PDFs on/off, and the ticket-link template.
+These are Ivanti's usual names, not guaranteed. One real tenant's Category
+and Sub-category turned out not to be separate business objects at all —
+both are read from `Subcategory#` itself (which carries its own `Service`
+and `Category` fields), with Shown field `Category` and `SubCategory`
+respectively. Change only what Test reports, then Test again. Also under
+Advanced: record type (`Incident#`), the number/subject/description fields,
+the subject and description templates (placeholders listed on the card),
+**extra fields** set on every ticket (`Name=Value` per line — e.g. a
+`ProfileLink` or `Source` your business rules require; Test lists required
+fields that nothing sets), attach PDFs on/off, and the ticket-link template.
 
 | Situation | Behaviour |
 |---|---|
 | Ivanti refuses the ticket (business rule, missing field) | Its reason is shown in the dialog; nothing is stored |
-| PDF over 10 MB or attaching fails | The SR is kept; the advisory shows "Partly done" with the reason |
-| Double-click / resubmit within 2 minutes | One SR — the same choices return the ticket just created |
+| PDF over 10 MB or attaching fails | The ticket is kept; the advisory shows "Partly done" with the reason |
+| Double-click / resubmit within 2 minutes | One ticket — the same choices return the ticket just created |
 | A value not in Ivanti's list for its parent (e.g. a tampered form) | Refused |
 | Lists changed in Ivanti | Picked up within 10 minutes, or **Refresh lists** on the card |

@@ -312,8 +312,8 @@ ticket's workflow stays in the ITSM tool; nothing is read back.
 | Column | Type | Notes |
 |---|---|---|
 | `advisory_id` | fk → advisory (cascade) | Several per advisory allowed |
-| `system` / `object_type` | text | `IVANTI` / e.g. `ServiceReq#` |
-| `number` | text nullable | e.g. `10452` — null only if Ivanti didn't return it |
+| `system` / `object_type` | text | `IVANTI` / e.g. `Incident#` (default record type, D-052) |
+| `number` | text nullable | e.g. `477333` — null only if Ivanti didn't return it |
 | `rec_id` | text | Ivanti RecId |
 | `url` | text | Opens the ticket in Ivanti (from the link template) |
 | `service` / `category` / `subcategory` / `team` | text | What the analyst chose, as sent |

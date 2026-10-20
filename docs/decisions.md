@@ -1424,6 +1424,38 @@ grouped admin page.
 
 ---
 
+## D-052 — Ivanti ticket record type defaults to Incident, not Service Request
+
+**Date:** 2026-10-20 · **Status:** Accepted
+
+**Why**: deploying against a real tenant to test D-050's integration found
+three real bugs in the SOAP client (empty `<Where>`, stripped `#` on
+`GetSchemaForObject`, pagination mis-termination — see the 2026-10-20
+progress log entry) that made every list and the ticket-schema check fail.
+Fixing those got Test passing for Service and Team, but creating a ticket
+then failed: `CreateObject` refused `Category` on `ServiceReq#` — a real
+Service Request on this tenant has no Category/Subcategory field at all,
+confirmed by pulling a real record's full field set live. It's classified
+by Service plus a linked product/catalog item instead, which doesn't map
+onto this integration's four-level model. `Incident#`, also confirmed live,
+has exactly the four fields the dialog needs (`Service`, `Category`,
+`Subcategory`, `OwnerTeam`), populated with real, advisory-shaped category
+data. The vendor's own sample tooling (PowerShell scripts supplied for this
+integration) was, in hindsight, entirely about creating Incidents and never
+mentioned Service Requests — a signal available from the start.
+
+| Decision | Because |
+|---|---|
+| `DEFAULTS["object_type"]` changed from `ServiceReq#` to `Incident#`, `number_field` from `ServiceReqNumber` to `IncidentNumber` | The only two settings that needed to change — every level's field name (`Service`/`Category`/`Subcategory`/`OwnerTeam`) and `Subject`/`Symptom` already match `Incident#` too, confirmed live |
+| Still just a default, changeable under Advanced | A tenant whose Service Requests *do* carry Category/Subcategory should be able to keep using them — Test is what actually decides, not this code |
+| UI copy changed from "Service Request"/"SR" to "Incident" | The default changed; the words on screen should match what gets created |
+| D-050 itself left unedited | It's a record of what was decided and verified at the time (against a fake Ivanti only); this entry supersedes the record-type choice, not the rest of it |
+
+**Not done**: a configurable choice of "Incident vs Service Request" beyond
+what Advanced's `object_type` field already allows; no new UI for it.
+
+---
+
 ## Open decisions
 
 Tracked in `CLAUDE.md` §5 until resolved. When one is answered, record it here as

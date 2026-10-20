@@ -4,12 +4,12 @@
 {% set missing = ivanti.missing() %}
 <section id="ivanti-card" class="card" style="margin-bottom:1.2rem">
   <div style="display:flex;justify-content:space-between;align-items:center">
-    <h3 style="margin:0">Ivanti ITSM — service requests</h3>
+    <h3 style="margin:0">Ivanti ITSM — incidents</h3>
     {% if ivanti.enabled %}<span class="badge badge-good">Enabled</span>
     {% else %}<span class="badge badge-neutral">Disabled</span>{% endif %}
   </div>
   <p class="muted" style="font-size:.82rem;margin:.35rem 0 .8rem">
-    Lets analysts raise a Service Request from an advisory, choosing Service, Category, Sub-category and Team
+    Lets analysts raise an Incident from an advisory, choosing Service, Category, Sub-category and Team
     from your Ivanti lists. The ticket is linked on the advisory; nothing is synced back.
   </p>
 

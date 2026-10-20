@@ -26,13 +26,13 @@ CATEGORIES = {"Endpoint Security": ["Patching", "Malware"], "Network": ["Firewal
 SUBCATEGORIES = {"Patching": ["Operating System", "Third-party"], "Firewall": ["Rules"]}
 TEAMS = ["SOC", "Desktop Support", "Network Team"]
 SCHEMA = (
-    '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="ServiceReq">'
+    '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="Incident">'
     "<xs:complexType><xs:sequence>"
     + "".join(
         f'<xs:element name="{n}" type="xs:string" minOccurs="{m}" />'
         for n, m in [
             ("Service", "0"), ("Category", "0"), ("Subcategory", "0"), ("OwnerTeam", "0"),
-            ("Subject", "0"), ("Symptom", "0"), ("ServiceReqNumber", "0"), ("ProfileLink", "1"),
+            ("Subject", "0"), ("Symptom", "0"), ("IncidentNumber", "0"), ("ProfileLink", "1"),
         ]
     )
     + "</xs:sequence></xs:complexType></xs:element></xs:schema>"
@@ -96,9 +96,9 @@ class FakeIvanti:
             return httpx.Response(200, text=_soap(op, "SESSION-1"))
         assert text("sessionKey") == "SESSION-1"
         if op == "GetSchemaForObject":
-            # Real Ivanti 404s this call for "ServiceReq" (the "#" stripped) even
+            # Real Ivanti 404s this call for "Incident" (the "#" stripped) even
             # though the business object is reachable via PaginationSearch as
-            # "ServiceReq#" — so the fake is strict about the "#" being present,
+            # "Incident#" — so the fake is strict about the "#" being present,
             # the same way the real tenant is.
             self.schema_requests.append(text("objectName"))
             if not text("objectName").endswith("#"):
@@ -147,7 +147,7 @@ class FakeIvanti:
                 )
                 return httpx.Response(200, text=_soap(op, inner))
             self.created.append(fields)
-            number = {**fields, "ServiceReqNumber": "10452"}
+            number = {**fields, "IncidentNumber": "10452"}
             inner = _wrap("status", "Success") + _wrap("recId", "REC-1")
             inner += _wrap("obj", _bo(number, "REC-1"))
             return httpx.Response(200, text=_soap(op, inner))
@@ -257,7 +257,7 @@ class TestSettingsAndTest:
         assert "for 'Endpoint Security'" in steps["Category list"].detail
         assert "for 'Patching'" in steps["Sub-category list"].detail
         assert "ProfileLink" in steps["Ticket fields"].detail  # required, not set here
-        assert fake.schema_requests == ["ServiceReq#"]  # "#" preserved, not stripped
+        assert fake.schema_requests == ["Incident#"]  # "#" preserved, not stripped
 
     def test_bad_key(self, db, fake) -> None:
         tickets.save_settings(db, base_url=BASE, api_key="wrong", advanced=None, actor=ACTOR)
@@ -347,7 +347,7 @@ class TestCreate:
         assert (t.number, t.rec_id, t.attachment_count, t.warning) == ("10452", "REC-1", 1, None)
         assert t.url == (
             f"{BASE}/HEAT/Default.aspx?Scope=ObjectWorkspace&CommandId=Search"
-            "&ObjectType=ServiceReq%23&CommandData=RecId,%3D,0,REC-1,string,AND|"
+            "&ObjectType=Incident%23&CommandData=RecId,%3D,0,REC-1,string,AND|"
         )
         sent = configured.created[0]
         assert sent["Service"] == "Endpoint Security" and sent["OwnerTeam"] == "SOC"
@@ -637,7 +637,7 @@ class TestWeb:
             r.headers["HX-Retarget"] == "#tickets-panel"
             and r.headers["HX-Trigger"] == "ticket-created"
         )
-        assert "SR 10452" in r.text and "CommandData=RecId,%3D,0,REC-1" in r.text
+        assert "Incident 10452" in r.text and "CommandData=RecId,%3D,0,REC-1" in r.text
         assert "Create another ticket" in r.text
         assert configured.created[0]["Subject"] == "DOH-2026901 - FortiOS"
 

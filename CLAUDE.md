@@ -131,6 +131,43 @@ data/                        # all persistent data, ./data/<volume> (git- and do
 
 Newest first. Update this when work lands.
 
+### 2026-10-20 — Ivanti ticket record type: Incident, not Service Request (D-052)
+- Follow-on from the same day's SOAP client bug fixes (below): with those
+  fixed, **Test** passed, but creating a real ticket then failed —
+  `CreateObject` refused `Field 'Category' was not found in business
+  object definition 'ServiceReq'`. Confirmed live (read-only calls, same
+  authorization as the bug-fix session) that a real `ServiceReq#` record
+  on this tenant has no Category/Subcategory field at all — Service
+  Requests here are classified by Service plus a linked product/catalog
+  item — while `Incident#` has exactly the four fields the dialog expects,
+  populated with real, advisory-shaped data (e.g. Category "Billing and
+  insurance" → Subcategory "Billing" under Service "Bayanaty PAS RCM").
+  Asked the user directly given D-050 explicitly chose Service Request;
+  they chose to switch the default to Incident.
+- `tickets.DEFAULTS["object_type"]`: `ServiceReq#` → `Incident#`;
+  `number_field`: `ServiceReqNumber` → `IncidentNumber`. Nothing else
+  needed to change — every level's ticket-field name and `Subject`/
+  `Symptom` already match `Incident#` too. UI copy ("Service Request"/
+  "SR" → "Incident") in the admin card, the create-ticket dialog, and the
+  ticket panel's link label. Still just a default — a tenant whose Service
+  Requests do support Category/Subcategory can switch back under Advanced.
+- **Operationally important, not obvious**: a code deploy alone does not
+  change this for an already-configured tenant. The first admin-panel
+  save of this form submits every field, including `object_type`'s
+  then-current value — so it gets written into `system_integration.config`
+  explicitly and from then on overrides the code default. Upgrading
+  without also changing the Record type field under Advanced leaves the
+  integration silently still pointed at `ServiceReq#`. docs/operations.md
+  §10 notes this isn't just a redeploy.
+- **Verified**: `ruff`/`mypy --strict` clean, 31 tests in `test_ivanti.py`
+  (test fixtures' object/field names updated to match), 850+ passing
+  project-wide. End-to-end against the real UAT tenant through the actual
+  admin UI (not just unit tests): updated Record type + Number field to
+  `Incident#`/`IncidentNumber`, Test passed all six checks (one run hit a
+  transient read timeout on the Category list, not a structural failure —
+  re-running Test passed cleanly). Ticket creation itself was not
+  exercised — no Incident was created against the real tenant.
+
 ### 2026-10-20 — Bug fix: Ivanti ITSM Test failed every list against a real tenant
 - User stood up a local test instance against a real Ivanti UAT tenant
   (`mediclinic-ae-ism-uat.ivanticloud.com`) and ran **Test**: API key signed

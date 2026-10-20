@@ -1,4 +1,4 @@
-"""Raise an Ivanti ITSM ticket (Service Request) for an advisory (D-050).
+"""Raise an Ivanti ITSM ticket (Incident) for an advisory (D-050).
 
 An analyst chooses Service → Category → Sub-category → Team from lists read
 live from Ivanti — each narrowing the next — and the ticket is created with
@@ -8,6 +8,13 @@ advisory keeps a link to it. One-way: nothing is read back afterwards.
 Settings live in ``system_integration`` (kind ``IVANTI_ITSM``): the tenant URL
 and an encrypted, write-only API key; the rest ("Advanced") has defaults and
 is checked by **Test**, which must pass before the integration can be enabled.
+
+The default record type is ``Incident#``, not ``ServiceReq#`` (Service
+Request) — a real tenant's Service Requests turned out to have no
+Category/Subcategory at all (classified instead by Service plus a linked
+product/catalog item), while Incidents carry the same four classification
+fields Advisory Hub's dialog expects. Confirmed against a live tenant. See
+D-052.
 """
 
 from __future__ import annotations
@@ -72,8 +79,8 @@ DEFAULT_LEVELS: dict[str, dict[str, str]] = {
     "team": {"field": "OwnerTeam", "bo": "StandardUserTeam#", "display": "Team", "parent": ""},
 }
 DEFAULTS: dict[str, Any] = {
-    "object_type": "ServiceReq#",
-    "number_field": "ServiceReqNumber",
+    "object_type": "Incident#",
+    "number_field": "IncidentNumber",
     "subject_field": "Subject",
     "description_field": "Symptom",
     "subject_template": "{ref} - {title}",

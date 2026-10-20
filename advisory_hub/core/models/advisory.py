@@ -352,7 +352,7 @@ class AdvisoryTicket(Base, UUIDPrimaryKey, TimestampMixin):
         PgUUID(as_uuid=True), ForeignKey("advisory.id", ondelete="CASCADE"), index=True
     )
     system: Mapped[str] = mapped_column(String(32), nullable=False)  # "IVANTI"
-    object_type: Mapped[str] = mapped_column(String(64), nullable=False)  # "ServiceReq#"
+    object_type: Mapped[str] = mapped_column(String(64), nullable=False)  # "Incident#"
     number: Mapped[str | None] = mapped_column(String(64), nullable=True)
     rec_id: Mapped[str] = mapped_column(String(64), nullable=False)
     url: Mapped[str | None] = mapped_column(Text, nullable=True)
