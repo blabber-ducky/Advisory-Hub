@@ -131,6 +131,50 @@ data/                        # all persistent data, ./data/<volume> (git- and do
 
 Newest first. Update this when work lands.
 
+### 2026-10-20 — Cross-checked the vendor docs against the Ivanti integration
+- User asked to validate the Advanced settings against the Ivanti support
+  docs they'd supplied (`MCME-Docs/`, gitignored). Confirmed one thing
+  already correct by coincidence (`Service_Valid` resolved independently
+  via `CI#Service` matches `Subcategory#.Service_Valid` exactly, verified
+  live for every "Security" subcategory row) and found a second real gap
+  the docs' payload-mapping table called out explicitly: every real
+  Incident on this tenant (5000 sampled) has `Customer_Shadowlink_*`,
+  `Division`, and `Source` set — fields Advisory Hub's integration never
+  sends at all.
+- `SHADOW_LINK_SUFFIXES = ("_Valid", "_RecID")` in `tickets.py`: the same
+  false-negative Test bug as `_Valid` fields, now confirmed for the
+  `_RecID` convention too (`Customer_Shadowlink_RecID` is real and
+  populated on every record, but `GetSchemaForObject` never lists it —
+  same blind spot, different suffix). "Ticket fields" no longer fails
+  over either suffix.
+- **No code change needed for Customer/Division/Source themselves** — the
+  existing "extra fields" mechanism already covers it. Asked the user who
+  should be the Customer (a per-advisory requester isn't collected by the
+  dialog); they chose a dedicated service account
+  (`mithun.rosinth@mediclinic.ae`, Department "GRC & Security") over
+  guessing from the handful of repeat requesters already visible on real
+  Security incidents. Resolved its `Employee#` RecId live (read-only) and
+  set, with the user's explicit values for Division/Source (`MCME`/
+  `Phone`, not the `Email` first suggested):
+  ```
+  Customer_Shadowlink_Category=Employee
+  Customer_Shadowlink_RecID=30D706528B0940748A6613637A560761
+  Division=MCME
+  Source=Phone
+  ```
+- docs/operations.md §10.2: documented the `_Valid` shadow-link pattern,
+  the Customer/Division/Source gap and its extra-fields fix, and that
+  finding a Customer's RecId has no UI yet — a one-off lookup.
+- **Verified**: `ruff`/`mypy --strict` clean, 33 tests in `test_ivanti.py`
+  (1 new: an extra field ending in `_RecID` doesn't fail "Ticket fields"),
+  850+ passing project-wide. Test passed all six checks against the real
+  UAT tenant with the extra fields set, `Customer_Shadowlink_RecID`
+  correctly shown as "Not checked" rather than failing. Ticket creation
+  itself was still not exercised — no Incident was created against the
+  real tenant, so the Customer/Division/Source values are confirmed
+  present on real tickets but not yet confirmed sufficient to pass
+  Ivanti's own create-time validation.
+
 ### 2026-10-20 — Bug fix: Ivanti rejected real values as "not in the validation list"
 - Follow-on from switching to `Incident#` (D-052): with that live, the user
   attempted a real ticket and Ivanti refused it —

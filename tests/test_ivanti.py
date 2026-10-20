@@ -259,6 +259,23 @@ class TestSettingsAndTest:
         assert "ProfileLink" in steps["Ticket fields"].detail  # required, not set here
         assert fake.schema_requests == ["Incident#"]  # "#" preserved, not stripped
 
+    def test_extra_field_ending_in_recid_is_not_checked_against_the_schema(self, db, fake) -> None:
+        """Regression: Customer_Shadowlink_RecID is a real, settable field
+        on a real tenant's Incidents — confirmed by reading it off real
+        records — but GetSchemaForObject never lists it, same blind spot
+        as "_Valid" fields. An extra field ending in "_RecID" must not
+        fail "Ticket fields"."""
+        tickets.save_settings(
+            db, base_url=BASE, api_key="good-key",
+            advanced={"extra_fields": "Customer_Shadowlink_RecID=ABC123"},
+            actor=ACTOR,
+        )  # fmt: skip
+        report = tickets.run_test(db, actor=ACTOR)
+        assert report.ok, report.steps
+        ticket_fields = next(s for s in report.steps if s.label == "Ticket fields")
+        assert "Customer_Shadowlink_RecID" in ticket_fields.detail
+        assert "Not found" not in ticket_fields.detail
+
     def test_bad_key(self, db, fake) -> None:
         tickets.save_settings(db, base_url=BASE, api_key="wrong", advanced=None, actor=ACTOR)
         report = tickets.run_test(db, actor=ACTOR)

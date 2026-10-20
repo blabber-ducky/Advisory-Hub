@@ -51,6 +51,11 @@ LEVEL_LABELS = {
     "team": "Team",
 }
 CACHE_SECONDS = 600
+#: Ivanti's naming for shadow-link fields: a "_Valid" lookup (e.g.
+#: Service_Valid) or a "_RecID" link (e.g. Customer_Shadowlink_RecID).
+#: Neither is ever listed by GetSchemaForObject, confirmed against a real
+#: tenant whose records carry both, populated.
+SHADOW_LINK_SUFFIXES = ("_Valid", "_RecID")
 ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
 #: An identical request this soon after a ticket was created returns that
 #: ticket instead of creating a second one (double-click guard).
@@ -396,12 +401,13 @@ def run_test(db: DbSession, *, actor: Actor) -> TestReport:
         wanted = [cfg["field"] for cfg in s.levels.values()]
         wanted += [str(adv["subject_field"]), str(adv["description_field"])]
         wanted += list(_parse_extra_fields(str(adv["extra_fields"])))
-        # Ivanti's "_Valid" shadow-link fields are confirmed real and
-        # settable (a live tenant's own records carry them, populated)
-        # but aren't listed by GetSchemaForObject at all — so their
-        # absence here is never meaningful and must not fail the check.
-        checkable = [f for f in wanted if not f.endswith("_Valid")]
-        not_checked = [f for f in wanted if f.endswith("_Valid")]
+        # Ivanti's shadow-link fields ("_Valid" lookups, "_RecID" links like
+        # Customer_Shadowlink_RecID) are confirmed real and settable — a
+        # live tenant's own records carry them, populated — but aren't
+        # listed by GetSchemaForObject at all, so their absence here is
+        # never meaningful and must not fail the check.
+        checkable = [f for f in wanted if not f.endswith(SHADOW_LINK_SUFFIXES)]
+        not_checked = [f for f in wanted if f.endswith(SHADOW_LINK_SUFFIXES)]
         absent = [f for f in checkable if f not in schema]
         uncovered = sorted(f for f, req in schema.items() if req and f not in wanted)
         detail = f"{adv['object_type']} has {len(schema)} fields."

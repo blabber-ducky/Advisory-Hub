@@ -684,6 +684,33 @@ the subject and description templates (placeholders listed on the card),
 `ProfileLink` or `Source` your business rules require; Test lists required
 fields that nothing sets), attach PDFs on/off, and the ticket-link template.
 
+**If Ivanti refuses a choice as "not in the validation list" even though
+it's a real, current value**: that Ticket field is one of Ivanti's shadow
+links (named `*_Valid`, e.g. `Service_Valid`) — it needs the linked
+record's RecId, not the display text. Change the level's Ticket field to
+the `_Valid` name; the integration then resolves and sends the RecId
+automatically. Confirmed against a real tenant where this affected every
+level.
+
+**If every Incident on your tenant always has a Customer, Division, or
+Source set** (check a few real ones), your tenant likely refuses to create
+one without them too — fields Advisory Hub's dialog doesn't collect. Add
+them as extra fields instead, e.g.:
+
+```
+Customer_Shadowlink_Category=Employee
+Customer_Shadowlink_RecID=<RecId of a service-account Employee>
+Division=MCME
+Source=Phone
+```
+
+`Customer_Shadowlink_RecID` (and other `*_RecID` shadow links) are, like
+`_Valid` fields, never listed by Test's schema check — its "Not checked"
+note for them is expected, not a problem. Finding the RecId requires a
+one-off lookup (`Employee#`, filtered by `PrimaryEmail`); there's no UI
+for this yet, so either read it from an existing ticket or ask whoever has
+Ivanti API access to look it up.
+
 | Situation | Behaviour |
 |---|---|
 | Ivanti refuses the ticket (business rule, missing field) | Its reason is shown in the dialog; nothing is stored |
