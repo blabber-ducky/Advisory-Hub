@@ -131,6 +131,46 @@ data/                        # all persistent data, ./data/<volume> (git- and do
 
 Newest first. Update this when work lands.
 
+### 2026-10-20 — Bug fix: Ivanti rejected real values as "not in the validation list"
+- Follow-on from switching to `Incident#` (D-052): with that live, the user
+  attempted a real ticket and Ivanti refused it —
+  `UndefinedValidatedValue: 'Security' is not in the validation list of
+  validated field Incident.Service` (and the same for `OwnerTeam`).
+  Confirmed live, read-only, that `'Security'`/`'Security Team'` are real,
+  exact, current values in `CI#Service`/`StandardUserTeam#` — not a typo.
+  Pulling a full real Incident record showed why: `Service` and
+  `Service_Valid` (a RecId) both exist side by side, same for
+  `Category`/`Subcategory`/`OwnerTeam`. Ivanti's "_Valid" fields are
+  shadow links — setting the plain-text field directly is refused even
+  when the text is a genuine current value; the RecId must be sent
+  instead, and the display text is then populated server-side.
+- `core.services.tickets._resolve_recid()`: when a level's "Ticket field"
+  (Advanced) ends in `_Valid`, `create_ticket()` resolves the chosen
+  display text to its record's RecId (one extra read per level, exact
+  match re-query) and sends that instead of the text. Convention-based on
+  the field name, not a new Advanced toggle — matches Ivanti's own naming
+  exactly, so a tenant whose fields are genuinely plain text is unaffected.
+  `AdvisoryTicket.service/category/subcategory/team` still store the
+  chosen display text, unchanged — only the Ivanti payload differs.
+- **Second, related finding**: `GetSchemaForObject` never lists `_Valid`
+  fields at all, confirmed against the same real record that proved they
+  exist and work. `run_test()`'s "Ticket fields" check was flagging them
+  as "Not found" and failing Test outright — a false negative, not a real
+  problem. Fixed: fields ending in `_Valid` are no longer checked against
+  the schema, shown in the detail as "Not checked" rather than silently
+  skipped or wrongly flagged.
+- **Verified**: `ruff`/`mypy --strict` clean, 32 tests in `test_ivanti.py`
+  (2 new: RecId sent instead of text for a `_Valid` field; "Ticket fields"
+  passes despite the fake schema not listing it either — matching the
+  real tenant's behaviour, not papering over it), 850+ passing
+  project-wide. End-to-end against the real UAT tenant through the actual
+  admin UI: set all four levels' Ticket field to `Service_Valid`/
+  `Category_Valid`/`Subcategory_Valid`/`OwnerTeam_Valid`, Test passed all
+  six checks (confirmed the RecId resolution itself resolves correctly
+  for `Security`→`CI#Service` and `Security Team`→`StandardUserTeam#`,
+  matching their real RecIds exactly). Ticket creation itself was not
+  exercised — no Incident was created against the real tenant.
+
 ### 2026-10-20 — Ivanti ticket record type: Incident, not Service Request (D-052)
 - Follow-on from the same day's SOAP client bug fixes (below): with those
   fixed, **Test** passed, but creating a real ticket then failed —

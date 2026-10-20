@@ -356,6 +356,34 @@ class TestCreate:
         assert configured.attachments == [("DOH-2026901.pdf", b"%PDF-1.4 advisory body")]
         assert db.scalar(select(AuditLog).where(AuditLog.action == "advisory.ticket_created"))
 
+    def test_valid_suffixed_field_sends_the_recid_not_the_text(
+        self, db, configured, advisory
+    ) -> None:
+        """Regression: a real tenant refused a level's chosen text as
+        "not in the validation list" for a shadow-link ("_Valid") field,
+        even though that exact text was a real, current value — Ivanti
+        expects the linked record's RecId there instead. Also: a real
+        tenant's GetSchemaForObject never lists these fields at all (the
+        fake's SCHEMA fixture doesn't define "OwnerTeam_Valid" either), so
+        Test must not fail "Ticket fields" over their absence."""
+        tickets.save_settings(
+            db, base_url=BASE, api_key=None,
+            advanced={"levels": {"team": {"field": "OwnerTeam_Valid"}}}, actor=ACTOR,
+        )  # fmt: skip
+        report = tickets.run_test(db, actor=ACTOR)
+        assert report.ok, report.steps
+        ticket_fields = next(s for s in report.steps if s.label == "Ticket fields")
+        assert "OwnerTeam_Valid" in ticket_fields.detail and "Not found" not in ticket_fields.detail
+        tickets.set_ivanti_enabled(db, enabled=True, actor=ACTOR)
+
+        subject, description = tickets.draft(db, advisory, "Ana")
+        tickets.create_ticket(
+            db, advisory.id, choices=CHOICES, subject=subject, description=description, actor=ACTOR
+        )
+        sent = configured.created[0]
+        assert sent["OwnerTeam_Valid"] == "R-SOC"  # the fake's RecId for "SOC", not the text
+        assert "OwnerTeam" not in sent
+
     def test_all_four_are_required(self, db, configured, advisory) -> None:
         with pytest.raises(tickets.TicketError, match="Sub-category"):
             tickets.create_ticket(

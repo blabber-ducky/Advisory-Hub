@@ -327,6 +327,32 @@ def parent_level(level: str) -> str | None:
     return LEVELS[index - 1] if index > 0 else None
 
 
+def _resolve_recid(
+    db: DbSession, s: IvantiSettings, level: str, parent: str | None, value: str
+) -> str:
+    """The RecId of the record ``value`` names, for a level whose "Ticket
+    field" is one of Ivanti's ``_Valid``-suffixed shadow-link fields.
+
+    Those fields are "validated": sending the literal display text (what
+    every other field on this form accepts) is refused as
+    ``UndefinedValidatedValue`` even when that exact text is a real,
+    current value in the list — confirmed against a live tenant. Ivanti
+    expects the linked record's RecId instead; setting it is what actually
+    populates the display text too."""
+    cfg = s.levels[level]
+    where = [(cfg["parent"], parent)] if cfg["parent"] and parent else []
+    where = [*where, (cfg["display"], value)]
+    try:
+        records = _client(db, s).search(cfg["bo"], [cfg["display"]], where)
+    except IvantiError as exc:
+        raise TicketError(str(exc)) from None
+    for found in records:
+        if found.get(cfg["display"], "").strip() == value and found.get("RecId"):
+            return found["RecId"]
+    label = LEVEL_LABELS[level]
+    raise TicketError(f"Couldn't resolve {value!r} to a record for {label} in Ivanti.")
+
+
 @dataclass(slots=True)
 class TestStep:
     label: str
@@ -370,13 +396,23 @@ def run_test(db: DbSession, *, actor: Actor) -> TestReport:
         wanted = [cfg["field"] for cfg in s.levels.values()]
         wanted += [str(adv["subject_field"]), str(adv["description_field"])]
         wanted += list(_parse_extra_fields(str(adv["extra_fields"])))
-        absent = [f for f in wanted if f not in schema]
+        # Ivanti's "_Valid" shadow-link fields are confirmed real and
+        # settable (a live tenant's own records carry them, populated)
+        # but aren't listed by GetSchemaForObject at all — so their
+        # absence here is never meaningful and must not fail the check.
+        checkable = [f for f in wanted if not f.endswith("_Valid")]
+        not_checked = [f for f in wanted if f.endswith("_Valid")]
+        absent = [f for f in checkable if f not in schema]
         uncovered = sorted(f for f, req in schema.items() if req and f not in wanted)
         detail = f"{adv['object_type']} has {len(schema)} fields."
         if absent:
             detail += f" Not found: {', '.join(absent)}."
         if uncovered:
             detail += f" Required by the schema but not set here: {', '.join(uncovered[:12])}."
+        if not_checked:
+            detail += (
+                f" Not checked (Ivanti doesn't list shadow-link fields): {', '.join(not_checked)}."
+            )
         report.steps.append(TestStep("Ticket fields", not absent, detail))
     elif not any(step.label == "Ticket fields" for step in report.steps):
         report.steps.append(
@@ -533,6 +569,10 @@ def create_ticket(
     if recent is not None:
         return CreateResult(recent, reused=True)
 
+    # A level's chosen value is sent as-is, unless its Ticket field is one
+    # of Ivanti's "_Valid" shadow-link fields, in which case the record's
+    # RecId is resolved and sent instead (see _resolve_recid).
+    sent_values: dict[str, str] = {}
     for level in LEVELS:
         cfg = s.levels[level]
         prev = parent_level(level)
@@ -540,12 +580,17 @@ def create_ticket(
         if chosen[level] not in options(db, level, parent):
             scope = f" under {parent!r}" if parent else ""
             raise TicketError(f"{chosen[level]!r} isn't a {LEVEL_LABELS[level]} in Ivanti{scope}.")
+        sent_values[level] = (
+            _resolve_recid(db, s, level, parent, chosen[level])
+            if cfg["field"].endswith("_Valid")
+            else chosen[level]
+        )
 
     adv = s.advanced
     object_type = str(adv["object_type"])
     values = {
         **_parse_extra_fields(str(adv["extra_fields"])),
-        **{s.levels[lvl]["field"]: chosen[lvl] for lvl in LEVELS},
+        **{s.levels[lvl]["field"]: sent_values[lvl] for lvl in LEVELS},
         str(adv["subject_field"]): subject[:250],
         str(adv["description_field"]): description,
     }
